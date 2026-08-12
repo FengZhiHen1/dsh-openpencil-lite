@@ -1,5 +1,6 @@
 /**
- * Browser presentation for `design_render`.
+ * Browser presentation for `openpencil_render` and historical
+ * `design_render` conversation cards.
  *
  * PNG remains the replay-safe default. When the host also grants access to
  * the source `.op`, the user can opt into one shared, read-only Web SDK
@@ -14,14 +15,31 @@ import {
   useSyncExternalStore,
 } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { ToolCallViewProps, ToolDetailsViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
+import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import { editorPanelCopy, ManagedOpenPencilEditor } from './editor-panel.js'
 import { editorLocaleFromDsh, type EditorColorScheme, type EditorLocale } from './editor-bridge.js'
+import {
+  requestOpenPencilEditor,
+  type CompatibleToolCallViewProps,
+  type CompatibleToolDetailsViewProps,
+} from './details-compat.js'
+import { ManagedOpenPencilEditorModal } from './editor-modal.js'
 import { FrameGallery, normalizeFrameIndex as normalizedFrameIndex } from './frame-gallery.js'
 import type { GalleryFrame, GalleryLocale } from './frame-gallery.js'
+import { OpenPencilSelectionDock } from './selection-dock.js'
+import {
+  LEGACY_DESIGN_RENDER_TOOL_NAME,
+  OPENPENCIL_RENDER_TOOL_NAME,
+} from '../tool-names.js'
+
+export {
+  LEGACY_DESIGN_RENDER_TOOL_NAME,
+  OPENPENCIL_RENDER_TOOL_NAME,
+} from '../tool-names.js'
 
 export {
   calculateGalleryFitViewZoom,
@@ -33,6 +51,7 @@ export {
   galleryZoomPercent,
   galleryZoomShortcut,
   GALLERY_COMPACT_MAX_HEIGHT,
+  GALLERY_TOOLBAR_CONTROL_CONTENT_LAYOUT,
   GALLERY_TOOLBAR_CONTROL_HEIGHT,
   GALLERY_TOOLBAR_CONTROL_LAYOUT,
   GALLERY_ZOOM_MAX,
@@ -41,7 +60,20 @@ export {
   nextGalleryZoom,
   normalizeFrameIndex,
 } from './frame-gallery.js'
-export { editorPanelCopy, launchManagedEditor, prepareManagedEditor } from './editor-panel.js'
+export {
+  closeManagedEditorLaunch,
+  editorPanelCopy,
+  launchManagedEditor,
+  prepareManagedEditor,
+  prepareManagedEditorForMount,
+} from './editor-panel.js'
+export {
+  requestOpenPencilEditor,
+} from './details-compat.js'
+export {
+  confirmEditorModalClose,
+  editorModalCopy,
+} from './editor-modal.js'
 export {
   editorGrantForBoot,
   editorSuccessorFromSave,
@@ -61,6 +93,23 @@ export {
   encodeEditorOutbound,
   parseEditorInbound,
 } from './editor-bridge.js'
+export {
+  clearOpenPencilSelection,
+  getOpenPencilSelectionSnapshot,
+  liveSelectionOf,
+  publishOpenPencilSelection,
+  subscribeOpenPencilSelection,
+} from './selection-store.js'
+export {
+  isTerminalEditorSelectionStatus,
+  startEditorSelectionPolling,
+} from './selection-polling.js'
+export {
+  hasOpenPencilSelection,
+  OPENPENCIL_SELECTION_DOCK_LAYOUT,
+  selectionNodeDetail,
+  selectionNodeLabel,
+} from './selection-dock.js'
 
 /** Presentation metadata key the host half projects into `block.meta`. */
 export const PRESENTATION_META_KEY = '$dshOpenPencil'
@@ -69,7 +118,7 @@ export type PresentationLocale = GalleryLocale
 
 const DESIGN_RENDER_COPY = {
   en: {
-    designRender: 'Design render',
+    designRender: 'OpenPencil render',
     error: 'error',
     rendering: 'rendering…',
     done: 'done',
@@ -77,6 +126,7 @@ const DESIGN_RENDER_COPY = {
     renderFailed: 'The render failed.',
     frames: 'frames',
     openInteractiveCanvas: 'Open interactive canvas',
+    editCanvas: 'Edit canvas',
     editInSidebar: 'Edit in sidebar',
     openRenderedPng: 'Open rendered PNG',
     downloadPng: 'Download PNG',
@@ -99,7 +149,7 @@ const DESIGN_RENDER_COPY = {
     editorUnavailable: 'Editable OpenPencil canvas is not available for this result.',
   },
   zh: {
-    designRender: '设计渲染',
+    designRender: 'OpenPencil 渲染',
     error: '错误',
     rendering: '渲染中…',
     done: '完成',
@@ -107,6 +157,7 @@ const DESIGN_RENDER_COPY = {
     renderFailed: '渲染失败。',
     frames: '页',
     openInteractiveCanvas: '打开交互画布',
+    editCanvas: '编辑画布',
     editInSidebar: '在侧边栏编辑',
     openRenderedPng: '打开渲染 PNG',
     downloadPng: '下载 PNG',
@@ -604,9 +655,20 @@ function CanvasModal({ grant, onClose, locale }: {
   )
 }
 
-/** Render one `design_render` tool call as a PNG-first card. */
-export function DesignRenderView({ block, openDetails, openFile, inspect, locale = 'en' }: ToolCallViewProps & {
+/** Render one OpenPencil render tool call as a PNG-first card. */
+export function DesignRenderView({
+  block,
+  openDetails,
+  openFile,
+  inspect,
+  locale = 'en',
+  colorScheme = 'light',
+  editorLocale,
+  sessionId,
+}: CompatibleToolCallViewProps & {
   locale?: PresentationLocale
+  colorScheme?: EditorColorScheme
+  editorLocale?: EditorLocale
 }) {
   const settled = 'kind' in block
   const error = settled && block.isError
@@ -619,7 +681,9 @@ export function DesignRenderView({ block, openDetails, openFile, inspect, locale
   const currentFrameIndex = normalizedFrameIndex(selectedFrameIndex, frames.length)
   const selectedFrame = frames[currentFrameIndex] ?? grant?.image
   const [modalToken, setModalToken] = useState<symbol>()
+  const [editorModalOpen, setEditorModalOpen] = useState(false)
   const releaseRef = useRef<() => void>()
+  const resolvedEditorLocale = editorLocale ?? editorLocaleFromDsh(locale)
 
   const closeCanvas = useCallback(() => {
     releaseRef.current?.()
@@ -636,6 +700,10 @@ export function DesignRenderView({ block, openDetails, openFile, inspect, locale
     setModalToken(token)
   }, [])
 
+  const openEditor = useCallback(() => {
+    requestOpenPencilEditor(openDetails, () => { setEditorModalOpen(true) })
+  }, [openDetails])
+
   useEffect(() => () => { releaseRef.current?.() }, [])
   useEffect(() => { setSelectedFrameIndex(0) }, [frames.map(frame => frame.previewUrl).join('\n')])
 
@@ -646,7 +714,7 @@ export function DesignRenderView({ block, openDetails, openFile, inspect, locale
       : <span style={{ ...styles.badge, ...styles.badgeOk }}>{copy.done}</span>
 
   return (
-    <section style={styles.card} data-tool="design_render" data-state={error ? 'error' : running ? 'running' : 'success'}>
+    <section style={styles.card} data-tool={OPENPENCIL_RENDER_TOOL_NAME} data-state={error ? 'error' : running ? 'running' : 'success'}>
       <div style={styles.head}><span>{copy.designRender}</span>{badge}</div>
       <div style={styles.body}>
         {running ? <p style={styles.muted}>{copy.renderingDocument}</p> : null}
@@ -665,7 +733,11 @@ export function DesignRenderView({ block, openDetails, openFile, inspect, locale
               <span title={grant.rendererBinary}>{grant.renderer}{grant.fidelity === undefined ? '' : ` · ${grant.fidelity}`}</span>
             ) : null}
             {grant.document !== undefined && grant.viewer !== undefined ? <button type="button" style={styles.primaryButton} onClick={openCanvas}>{copy.openInteractiveCanvas}</button> : null}
-            {grant.document !== undefined && grant.editor?.enabled === true ? <button type="button" style={styles.primaryButton} onClick={openDetails}>{copy.editInSidebar}</button> : null}
+            {grant.document !== undefined && grant.editor?.enabled === true ? (
+              <button type="button" style={styles.primaryButton} onClick={openEditor}>
+                {openDetails === undefined ? copy.editCanvas : copy.editInSidebar}
+              </button>
+            ) : null}
             {selectedFrame !== undefined && openFile !== undefined ? (
               <button type="button" style={styles.button} onClick={() => { openFile(selectedFrame.path) }}>{copy.openRenderedPng}</button>
             ) : null}
@@ -682,12 +754,21 @@ export function DesignRenderView({ block, openDetails, openFile, inspect, locale
         ) : null}
       </div>
       {modalToken !== undefined && grant?.document !== undefined && grant.viewer !== undefined ? <CanvasModal grant={grant} onClose={closeCanvas} locale={locale} /> : null}
+      {editorModalOpen && grant?.document !== undefined && grant.editor?.enabled === true ? (
+        <ManagedOpenPencilEditorModal
+          grant={grant}
+          colorScheme={colorScheme}
+          locale={resolvedEditorLocale}
+          sessionId={String(sessionId)}
+          onClose={() => { setEditorModalOpen(false) }}
+        />
+      ) : null}
     </section>
   )
 }
 
 /** Render the selected editable design inside DSH's resident details column. */
-export function OpenPencilEditorPanel({ block, colorScheme, locale }: ToolDetailsViewProps & {
+export function OpenPencilEditorPanel({ block, colorScheme, locale, sessionId }: CompatibleToolDetailsViewProps & {
   colorScheme: EditorColorScheme
   locale: EditorLocale
 }) {
@@ -695,13 +776,13 @@ export function OpenPencilEditorPanel({ block, colorScheme, locale }: ToolDetail
   if (grant?.editor === undefined || grant.document === undefined) {
     return <div style={styles.overlay}>{editorPanelCopy(locale).unavailable}</div>
   }
-  return <ManagedOpenPencilEditor grant={grant} colorScheme={colorScheme} locale={locale} />
+  return <ManagedOpenPencilEditor grant={grant} colorScheme={colorScheme} locale={locale} sessionId={String(sessionId)} />
 }
 
 /** Required client services. */
 export const inject = ['slots', 'theme', 'locale']
 
-/** Register the dedicated toolview for `design_render`. */
+/** Register canonical views plus a presentation-only alias for replaying historical cards. */
 export function apply(ctx: ClientContext): void {
   const subscribeTheme = (notify: () => void): (() => boolean) => ctx.on('theme/change', notify)
   const getColorScheme = (): EditorColorScheme => ctx.theme.getTheme().active.colorScheme
@@ -710,19 +791,37 @@ export function apply(ctx: ClientContext): void {
   const getEditorLocale = (): EditorLocale => editorLocaleFromDsh(getLocale())
   const HostSyncedDesignRenderView = (props: ToolCallViewProps): React.JSX.Element => {
     const locale = useSyncExternalStore(subscribeLocale, getLocale, getLocale)
-    return <DesignRenderView {...props} locale={locale} />
+    const colorScheme = useSyncExternalStore(subscribeTheme, getColorScheme, getColorScheme)
+    return (
+      <DesignRenderView
+        {...props}
+        locale={locale}
+        editorLocale={editorLocaleFromDsh(locale)}
+        colorScheme={colorScheme}
+      />
+    )
   }
-  const HostSyncedOpenPencilEditorPanel = (props: ToolDetailsViewProps): React.JSX.Element => {
+  const HostSyncedOpenPencilEditorPanel = (props: CompatibleToolDetailsViewProps): React.JSX.Element => {
     const colorScheme = useSyncExternalStore(subscribeTheme, getColorScheme, getColorScheme)
     const locale = useSyncExternalStore(subscribeLocale, getEditorLocale, getEditorLocale)
     return <OpenPencilEditorPanel {...props} colorScheme={colorScheme} locale={locale} />
   }
-  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
-    { name: 'tool.call.toolview', key: 'design_render' },
-    HostSyncedDesignRenderView,
-  ))
-  ctx.slots.inject('tool.details.toolview', () => ctx.slots.register(
-    { name: 'tool.details.toolview', key: 'design_render' },
-    HostSyncedOpenPencilEditorPanel,
+  const HostSyncedOpenPencilSelectionDock = (props: Omit<React.ComponentProps<typeof OpenPencilSelectionDock>, 'locale'>): React.JSX.Element => {
+    const locale = useSyncExternalStore(subscribeLocale, getLocale, getLocale)
+    return <OpenPencilSelectionDock {...props} locale={locale} />
+  }
+  for (const toolName of [OPENPENCIL_RENDER_TOOL_NAME, LEGACY_DESIGN_RENDER_TOOL_NAME]) {
+    ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
+      { name: 'tool.call.toolview', key: toolName },
+      HostSyncedDesignRenderView,
+    ))
+    ctx.slots.inject('tool.details.toolview', () => ctx.slots.register(
+      { name: 'tool.details.toolview', key: toolName },
+      HostSyncedOpenPencilEditorPanel,
+    ))
+  }
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register(
+    { name: 'conversation.input.dock', id: 'openpencil-selection', order: 30 },
+    HostSyncedOpenPencilSelectionDock,
   ))
 }

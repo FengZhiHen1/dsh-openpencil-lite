@@ -8,20 +8,23 @@ DeepSeek Harness plugin for previewing and editing OpenPencil `.op` documents in
 
 **中文**
 
-DSH OpenPencil 是连接 DeepSeek Harness 与 OpenPencil 的智能设计插件，目标是让 Agent 直接驱动真实、可编辑、可交互的设计画布，而不是只返回一张生成图片。它支持在对话中渲染和浏览多页面 `.op` 设计稿，一键进入可缩放画布或完整侧边栏编辑器，继续使用 OpenPencil 的图层、属性、绘制、组件、交互和多类模板能力，快速创建 App 页面、演示文稿、社交媒体内容、信息图等不同类型的设计；同时让 DeepSeek Harness 中的 Agent 理解画布结构、节点、选区、组件关系与交互逻辑，直接调用模板、生成页面、修改组件、调整布局、编排交互、检查视觉质量并保存结果，把“对话提出需求—Agent 操作真实画布—实时预览与交互验证—继续迭代”整合成一条完整设计工作流。
+DSH OpenPencil 是连接 DeepSeek Harness 与 OpenPencil 的智能设计插件，目标是让 Agent 直接驱动真实、可编辑、可交互的设计画布，而不是只返回一张生成图片。它支持在对话中渲染和浏览多页面 `.op` 设计稿，一键进入可缩放画布或完整编辑器（在支持的 DSH 中使用原生右侧详情栏，rc.2 则自动回退到插件全屏编辑面板），继续使用 OpenPencil 的图层、属性、绘制、组件、交互和多类模板能力，快速创建 App 页面、演示文稿、社交媒体内容、信息图等不同类型的设计；同时让 DeepSeek Harness 中的 Agent 理解画布结构、节点、选区、组件关系与交互逻辑，直接调用模板、生成页面、修改组件、调整布局、编排交互、检查视觉质量并保存结果，把“对话提出需求—Agent 操作真实画布—实时预览与交互验证—继续迭代”整合成一条完整设计工作流。
 
 **English**
 
-DSH OpenPencil is an intelligent design plugin that connects DeepSeek Harness with OpenPencil. Its goal is to let an Agent directly operate a real, editable, and interactive design canvas instead of returning only a generated image. It can render and browse multi-page `.op` designs inside a conversation, then open them in a zoomable canvas or the full sidebar editor. From there, users retain OpenPencil's layers, properties, drawing tools, components, interactions, and broad template library for creating app screens, presentations, social media content, infographics, and more. At the same time, the Agent can understand the canvas structure, nodes, selections, component relationships, and interaction logic; invoke templates; generate pages; modify components; adjust layouts; orchestrate interactions; inspect visual quality; and save the result. This brings requirement gathering, direct Agent-driven canvas editing, live preview and interaction validation, and continued iteration into one complete design workflow.
+DSH OpenPencil is an intelligent design plugin that connects DeepSeek Harness with OpenPencil. Its goal is to let an Agent directly operate a real, editable, and interactive design canvas instead of returning only a generated image. It can render and browse multi-page `.op` designs inside a conversation, then open them in a zoomable canvas or the full editor. Hosts with the native Tool-details seam use DSH's right-hand details panel; stock rc.2 automatically falls back to the plugin's full-screen editor. From there, users retain OpenPencil's layers, properties, drawing tools, components, interactions, and broad template library for creating app screens, presentations, social media content, infographics, and more. At the same time, the Agent can understand the canvas structure, nodes, selections, component relationships, and interaction logic; invoke templates; generate pages; modify components; adjust layouts; orchestrate interactions; inspect visual quality; and save the result. This brings requirement gathering, direct Agent-driven canvas editing, live preview and interaction validation, and continued iteration into one complete design workflow.
 
 ## What works
 
-- `design_render` creates an immutable, content-addressed `.op` snapshot.
+- `openpencil_render` creates an immutable, content-addressed `.op` snapshot and renders every top-level frame on the active page.
+- `openpencil_selection` reads the exact nodes selected in the live sidebar canvas.
+- `openpencil_create` applies a transactional OpenPencil `batch_design` program to generate or restructure canvas nodes.
+- `openpencil_edit` modifies an explicit node or the single node selected by the user.
 - OpenPencil's installed headless exporter is the default, design-fidelity renderer.
 - The tool card shows the first top-level frame as a large replay-safe PNG. Multi-frame documents add a horizontally scrollable thumbnail rail, click-to-select, and previous/next navigation.
 - The large preview supports manual zoom, reset, fit-frame, and fit-content modes.
 - “Open interactive canvas” lazily mounts the read-only OpenPencil Web SDK. The canvas supports pan, zoom, and fit.
-- With `editable: true`, “Edit in sidebar” opens the managed OpenPencil editor with selection, layers, properties, drawing tools, undo/redo, and explicit save semantics.
+- With `editable: true`, the edit action opens the managed OpenPencil editor with selection, layers, properties, drawing tools, undo/redo, and explicit save semantics. It prefers DSH's native Tool-details sidebar and falls back to a full-screen plugin modal on stock rc.2.
 - The tool card and managed editor follow DSH's Chinese/English locale and light/dark theme without reloading the editing session.
 - Image and document grants are signed, hash-bound capabilities. Browser metadata does not expose an arbitrary host path.
 - If the exact OpenPencil binary is genuinely unavailable, Jian may produce a clearly labelled `runtime-preview` fallback. Exact renderer failures, timeouts, and invalid PNGs do not silently fall back.
@@ -34,16 +37,16 @@ Use an authenticated DSH prerelease without installing it globally:
 
 ```sh
 git clone git@github.com:dsh-external/dsh-openpencil.git
-npx --yes -p @deepseek-ai/dsh@0.0.1-rc.1 \
+npx --yes -p @deepseek-ai/dsh@0.0.1-rc.2 \
   dsh plugin --profile web add /absolute/path/to/dsh-openpencil
-npx --yes -p @deepseek-ai/dsh@0.0.1-rc.1 dsh web
+npx --yes -p @deepseek-ai/dsh@0.0.1-rc.2 dsh web
 ```
 
 Keep the private registry credential in a user-level or temporary npm config outside the checkout. This repository intentionally contains no registry credentials.
 
 ## Rendering contract
 
-`design_render` accepts a `.op` path, an optional `scale` (`0 < scale <= 8`, default `1`), and optional `editable` (`false` by default). Leave `width` and `height` unset for the exact OpenPencil path: they describe a runtime viewport, not design export dimensions, and are accepted only by the lower-fidelity Jian fallback.
+`openpencil_render` accepts a `.op` path, an optional `scale` (`0 < scale <= 8`, default `1`), and optional `editable` (`false` by default). Leave `width` and `height` unset for the exact OpenPencil path: they describe a runtime viewport, not design export dimensions, and are accepted only by the lower-fidelity Jian fallback.
 
 OpenPencil binary discovery checks, in order:
 
@@ -68,7 +71,7 @@ Viewer assets are lazy-loaded only after the user opens the canvas. If they are 
 
 ## Managed editor
 
-Editable sessions use OpenPencil's managed web host, the same architecture used by `op-vscode`. The plugin starts the host only after an authorized user action, keeps the daemon token in memory, validates iframe source and origin, and closes the process when the editor session ends.
+Editable sessions use OpenPencil's managed web host, the same architecture used by `op-vscode`. The plugin starts the host only after an authorized user action, keeps the daemon token in memory, validates iframe source and origin, and closes the process when the editor session ends. The editor surface is selected progressively: native Tool details when the host declares that seam, otherwise the plugin's full-screen modal.
 
 Binary and source discovery can be overridden with:
 
@@ -92,7 +95,7 @@ Builds require Node 24.11 or newer. DSH host/client packages are peer dependenci
 For a private DSH prerelease, keep the issued npm credential outside this repository (for example in a user-level or temporary `.npmrc`) and run the requested version directly:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.0.1-rc.1 dsh web
+npx --yes -p @deepseek-ai/dsh@0.0.1-rc.2 dsh web
 ```
 
 Never commit `.npmrc`, `NPM_TOKEN`, or copied registry credentials. This repository ignores local npm configuration by default.
@@ -113,7 +116,7 @@ The result also records `renderer`, `rendererBinary`, `fidelity`, and any warnin
 
 ## Current limits
 
-- `design_create` and `design_edit` are not implemented by this package.
-- The lightweight Web SDK canvas is read-only; full editing uses the separate managed sidebar editor.
+- Canvas generation and node edits require an already-open managed editor. Changes remain unsaved until the user or Agent explicitly invokes its Save action.
+- The lightweight Web SDK canvas is read-only; full editing uses the separate managed editor surface (native details sidebar when available, full-screen fallback on stock rc.2).
 - The exact gallery covers top-level frames on the active page; the interactive canvas remains the way to inspect inactive pages and nested nodes.
 - Render and snapshot caches still need a product-level retention policy.

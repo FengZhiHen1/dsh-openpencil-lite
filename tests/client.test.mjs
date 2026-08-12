@@ -33,6 +33,27 @@ function memoryStorage() {
   }
 }
 
+function flushAsync() {
+  return new Promise(resolve => setImmediate(resolve))
+}
+
+function controlledPollTimer() {
+  const scheduled = []
+  const cancelled = []
+  return {
+    scheduled,
+    cancelled,
+    timer: {
+      schedule(callback, delayMs) {
+        const handle = { callback, delayMs }
+        scheduled.push(handle)
+        return handle
+      },
+      cancel(handle) { cancelled.push(handle) },
+    },
+  }
+}
+
 test('keeps the established v1 PNG envelope replayable', () => {
   const grant = client.grantOf(settled({
     $dshOpenPencil: {
@@ -197,6 +218,12 @@ test('gallery toolbar controls share a vertically-centered box', () => {
     lineHeight: 1,
     verticalAlign: 'middle',
   })
+  assert.deepEqual(client.GALLERY_TOOLBAR_CONTROL_CONTENT_LAYOUT, {
+    display: 'inline-block',
+    lineHeight: 1,
+    transform: 'translateY(-1px)',
+    pointerEvents: 'none',
+  })
 })
 
 test('gallery and render-card copy follow the resolved DSH locale', () => {
@@ -215,16 +242,61 @@ test('gallery and render-card copy follow the resolved DSH locale', () => {
   assert.equal(client.frameLabel({}, 3, 'en'), 'Frame 4')
 
   const zhCard = client.designRenderCopy('zh')
-  assert.equal(zhCard.designRender, '设计渲染')
+  assert.equal(zhCard.designRender, 'OpenPencil 渲染')
   assert.equal(zhCard.openInteractiveCanvas, '打开交互画布')
+  assert.equal(zhCard.editCanvas, '编辑画布')
   assert.equal(zhCard.editInSidebar, '在侧边栏编辑')
   assert.equal(zhCard.downloadPng, '下载 PNG')
   assert.equal(zhCard.noPreview, '当前宿主没有可用的预览通道。')
 
   const enCard = client.designRenderCopy('en')
-  assert.equal(enCard.designRender, 'Design render')
+  assert.equal(enCard.designRender, 'OpenPencil render')
   assert.equal(enCard.openInteractiveCanvas, 'Open interactive canvas')
+  assert.equal(enCard.editCanvas, 'Edit canvas')
   assert.equal(enCard.noPreview, 'No preview channel available in this host.')
+})
+
+test('live OpenPencil selection is parsed, scoped by DSH session, and labelled bilingually', () => {
+  const emptyBeforePoll = client.getOpenPencilSelectionSnapshot('session-empty')
+  assert.strictEqual(
+    client.getOpenPencilSelectionSnapshot('session-empty'),
+    emptyBeforePoll,
+    'empty snapshots must stay referentially stable for useSyncExternalStore',
+  )
+  const selection = client.liveSelectionOf({
+    sourcePath: '/designs/home.op', activePageId: 'page-1', selectedIds: ['n42'], updatedAt: 7,
+    nodes: [{ id: 'n42', type: 'text', name: 'Hero title', x: 12, y: 20, width: 320, height: 48 }],
+  })
+  assert.ok(selection)
+  assert.equal(client.hasOpenPencilSelection(selection), true)
+  assert.equal(client.hasOpenPencilSelection({ ...selection, selectedIds: [] }), false)
+  assert.deepEqual(client.OPENPENCIL_SELECTION_DOCK_LAYOUT, {
+    boxSizing: 'border-box',
+    flex: 'none',
+    width: 'calc(100% - var(--dsh-composer-side-clearance, 16px) - var(--dsh-composer-side-clearance, 16px) - var(--dsh-composer-dock-inset, 8px) - var(--dsh-composer-dock-inset, 8px) - var(--dsh-composer-dock-inset, 8px) - var(--dsh-composer-dock-inset, 8px))',
+    maxWidth: 'calc(var(--dsh-composer-card-max-width, 780px) - var(--dsh-composer-dock-inset, 8px) - var(--dsh-composer-dock-inset, 8px) - var(--dsh-composer-dock-inset, 8px) - var(--dsh-composer-dock-inset, 8px))',
+    margin: '0 auto',
+  })
+  assert.equal(client.selectionNodeLabel(selection, 'en'), 'Hero title')
+  assert.equal(client.selectionNodeLabel(selection, 'zh'), 'Hero title')
+  assert.equal(client.selectionNodeDetail(selection, 'en'), 'text · 320 × 48 · n42')
+
+  client.publishOpenPencilSelection('session-a', selection)
+  assert.equal(client.getOpenPencilSelectionSnapshot('session-a').selection.nodes[0].id, 'n42')
+  assert.equal(client.getOpenPencilSelectionSnapshot('session-b').selection, undefined)
+  client.clearOpenPencilSelection('session-b')
+  assert.ok(client.getOpenPencilSelectionSnapshot('session-a').selection)
+  client.clearOpenPencilSelection('session-a', '/designs/home.op')
+  assert.equal(client.getOpenPencilSelectionSnapshot('session-a').selection, undefined)
+})
+
+test('selection labels retain id-only and multi-select fallbacks', () => {
+  const multi = {
+    sourcePath: '/designs/home.op', activePageId: 'page-1', selectedIds: ['n1', 'n2'], nodes: [], updatedAt: 1,
+  }
+  assert.equal(client.selectionNodeLabel(multi, 'zh'), '已选择 2 个节点')
+  assert.equal(client.selectionNodeLabel(multi, 'en'), '2 nodes selected')
+  assert.equal(client.selectionNodeDetail(multi, 'en'), 'n1 · n2')
 })
 
 test('gallery zoom shortcuts require Ctrl or Command', () => {
@@ -372,6 +444,77 @@ test('editor bridge emits the strict resolved DSH theme message', () => {
   assert.deepEqual(client.inject, ['slots', 'theme', 'locale'])
 })
 
+test('registers canonical OpenPencil render views and client-only legacy replay aliases', () => {
+  const registrations = []
+  client.apply({
+    on() { return () => {} },
+    theme: { getTheme: () => ({ active: { colorScheme: 'light' } }) },
+    locale: { getLocale: () => ({ active: 'en' }) },
+    slots: {
+      inject(_name, install) { return install() },
+      register(definition, component) {
+        registrations.push({ definition, component })
+        return () => {}
+      },
+    },
+  })
+
+  assert.equal(client.OPENPENCIL_RENDER_TOOL_NAME, 'openpencil_render')
+  assert.equal(client.LEGACY_DESIGN_RENDER_TOOL_NAME, 'design_render')
+  assert.deepEqual(registrations.map(({ definition }) => definition), [
+    { name: 'tool.call.toolview', key: 'openpencil_render' },
+    { name: 'tool.details.toolview', key: 'openpencil_render' },
+    { name: 'tool.call.toolview', key: 'design_render' },
+    { name: 'tool.details.toolview', key: 'design_render' },
+    { name: 'conversation.input.dock', id: 'openpencil-selection', order: 30 },
+  ])
+})
+
+test('stock rc.2 can leave the optional details slot undeclared', () => {
+  const registrations = []
+  const pending = []
+  client.apply({
+    on() { return () => {} },
+    theme: { getTheme: () => ({ active: { colorScheme: 'light' } }) },
+    locale: { getLocale: () => ({ active: 'en' }) },
+    slots: {
+      inject(name, install) {
+        if (name === 'tool.details.toolview') {
+          pending.push(name)
+          return () => {}
+        }
+        return install()
+      },
+      register(definition) {
+        registrations.push(definition)
+        return () => {}
+      },
+    },
+  })
+
+  assert.deepEqual(pending, ['tool.details.toolview', 'tool.details.toolview'])
+  assert.deepEqual(registrations, [
+    { name: 'tool.call.toolview', key: 'openpencil_render' },
+    { name: 'tool.call.toolview', key: 'design_render' },
+    { name: 'conversation.input.dock', id: 'openpencil-selection', order: 30 },
+  ])
+})
+
+test('editor launch prefers native details and falls back to the plugin modal', () => {
+  const calls = []
+  assert.equal(client.requestOpenPencilEditor(
+    () => { calls.push('details') },
+    () => { calls.push('modal') },
+  ), 'details')
+  assert.deepEqual(calls, ['details'])
+
+  assert.equal(client.requestOpenPencilEditor(
+    undefined,
+    () => { calls.push('modal') },
+  ), 'modal')
+  assert.deepEqual(calls, ['details', 'modal'])
+})
+
 test('editor bridge maps and emits the resolved DSH locale as BCP 47', () => {
   assert.equal(client.editorLocaleFromDsh('zh'), 'zh-CN')
   assert.equal(client.editorLocaleFromDsh('en'), 'en-US')
@@ -399,6 +542,125 @@ test('editor panel chrome follows the resolved editor locale', () => {
   assert.equal(en.loading, 'Loading editable OpenPencil canvas…')
   assert.equal(en.editorTitle('home.op'), 'OpenPencil editor: home.op')
   assert.equal(en.syncConflict(7), 'The source changed outside this editor (server v7). Save was stopped.')
+})
+
+test('fallback editor modal chrome follows the resolved editor locale', () => {
+  assert.deepEqual(client.editorModalCopy('zh-CN'), {
+    title: 'OpenPencil 编辑器',
+    close: '关闭',
+    discard: 'OpenPencil 中有未保存的更改，确定关闭并放弃吗？',
+  })
+  assert.deepEqual(client.editorModalCopy('en-US'), {
+    title: 'OpenPencil editor',
+    close: 'Close',
+    discard: 'OpenPencil has unsaved changes. Close and discard them?',
+  })
+})
+
+test('fallback editor modal confirms only when the managed editor is dirty', () => {
+  const cleanRoot = { querySelector() { return null } }
+  let confirmations = 0
+  assert.equal(client.confirmEditorModalClose(cleanRoot, 'discard?', () => {
+    confirmations += 1
+    return false
+  }), true)
+  assert.equal(confirmations, 0)
+
+  const dirtyRoot = { querySelector(selector) {
+    assert.equal(selector, '[data-tool-details-dirty="true"]')
+    return {}
+  } }
+  assert.equal(client.confirmEditorModalClose(dirtyRoot, 'discard?', message => {
+    confirmations += 1
+    assert.equal(message, 'discard?')
+    return false
+  }), false)
+  assert.equal(client.confirmEditorModalClose(dirtyRoot, 'discard?', () => {
+    confirmations += 1
+    return true
+  }), true)
+  assert.equal(confirmations, 2)
+})
+
+test('selection polling stops and clears state on terminal 404 and 410 responses', async () => {
+  for (const status of [404, 410]) {
+    const clock = controlledPollTimer()
+    let stops = 0
+    let calls = 0
+    client.startEditorSelectionPolling({
+      url: `/editor/selection/${status}`,
+      fetcher: async () => {
+        calls += 1
+        return new Response(null, { status })
+      },
+      onValue() { assert.fail('terminal responses must not publish a selection') },
+      onStop() { stops += 1 },
+      timer: clock.timer,
+    })
+    await flushAsync()
+    assert.equal(calls, 1)
+    assert.equal(stops, 1, `${status} must clear the live selection`)
+    assert.equal(clock.scheduled.length, 0, `${status} must not schedule another poll`)
+  }
+})
+
+test('selection polling retries transient failures and cleanup cancels the next timer', async () => {
+  const clock = controlledPollTimer()
+  const values = []
+  let calls = 0
+  let stops = 0
+  const stop = client.startEditorSelectionPolling({
+    url: '/editor/selection/transient',
+    fetcher: async () => {
+      calls += 1
+      if (calls === 1) return new Response(null, { status: 503 })
+      return Response.json({ selection: { selectedIds: ['n1'] } })
+    },
+    onValue(value) { values.push(value) },
+    onStop() { stops += 1 },
+    intervalMs: 123,
+    timer: clock.timer,
+  })
+  await flushAsync()
+  assert.equal(clock.scheduled.length, 1)
+  assert.equal(clock.scheduled[0].delayMs, 123)
+
+  clock.scheduled.shift().callback()
+  await flushAsync()
+  assert.equal(calls, 2)
+  assert.deepEqual(values, [{ selection: { selectedIds: ['n1'] } }])
+  assert.equal(clock.scheduled.length, 1)
+
+  const pending = clock.scheduled[0]
+  stop()
+  stop()
+  assert.deepEqual(clock.cancelled, [pending])
+  assert.equal(stops, 1, 'cleanup must clear selection exactly once')
+})
+
+test('selection polling cleanup aborts an in-flight request without scheduling a retry', async () => {
+  const clock = controlledPollTimer()
+  let observedSignal
+  let stops = 0
+  const stop = client.startEditorSelectionPolling({
+    url: '/editor/selection/in-flight',
+    fetcher: async (_url, init = {}) => {
+      observedSignal = init.signal
+      return new Promise((_resolve, reject) => {
+        observedSignal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true })
+      })
+    },
+    onValue() { assert.fail('an aborted request must not publish a selection') },
+    onStop() { stops += 1 },
+    timer: clock.timer,
+  })
+  await flushAsync()
+  assert.equal(observedSignal.aborted, false)
+  stop()
+  await flushAsync()
+  assert.equal(observedSignal.aborted, true)
+  assert.equal(stops, 1)
+  assert.equal(clock.scheduled.length, 0)
 })
 
 test('editor control capabilities remain on the DSH origin', () => {
@@ -499,7 +761,7 @@ test('current or renewed editor contracts never reopen an immutable historical s
       return Response.json(launchWithoutDoc)
     },
   }), /omitted current docJson/)
-  assert.equal(currentCalls, 1, 'current contract must not fetch the historical snapshot')
+  assert.equal(currentCalls, 2, 'current contract must close its launched daemon without fetching the historical snapshot')
 
   let renewedCalls = 0
   await assert.rejects(client.prepareManagedEditor({
@@ -516,7 +778,44 @@ test('current or renewed editor contracts never reopen an immutable historical s
       return Response.json(launchWithoutDoc)
     },
   }), /omitted current docJson/)
-  assert.equal(renewedCalls, 3, 'renewed launch must not make a fourth historical-document request')
+  assert.equal(renewedCalls, 4, 'renewed launch must close its daemon instead of reading the historical document')
+})
+
+test('cancelled editor mount closes exactly the launch that completed after cancellation', async () => {
+  const calls = []
+  const fetcher = async (url, init = {}) => {
+    calls.push({ url, init })
+    if (calls.length === 1) {
+      return Response.json({
+        sessionId: 'cancelled-session',
+        iframeUrl: 'http://127.0.0.1:49155/?embed=vscode',
+        token: 'daemon-secret',
+        saveUrl: '/editor/session/cancelled-session/save',
+        closeUrl: '/editor/session/cancelled-session',
+        docJson: '{"source":"current"}',
+      })
+    }
+    return Response.json({ ok: true })
+  }
+
+  const prepared = await client.prepareManagedEditorForMount({
+    enabled: true,
+    launchUrl: '/editor/cancelled-launch',
+    refreshUrl: '/editor/cancelled-refresh',
+  }, {
+    path: '/workspace/design.op',
+    url: '/render/document',
+  }, () => false, { fetcher, sessionId: 'dsh-session' })
+
+  assert.equal(prepared, undefined)
+  assert.equal(calls.length, 2)
+  assert.equal(calls[1].url, 'http://127.0.0.1:3080/editor/session/cancelled-session')
+  assert.equal(calls[1].init.method, 'DELETE')
+  assert.equal(calls[1].init.keepalive, true)
+  assert.deepEqual(JSON.parse(calls[1].init.body), {
+    sessionId: 'cancelled-session',
+    dirty: false,
+  })
 })
 
 test('editor launch refresh is limited to 410 and one retry', async () => {
