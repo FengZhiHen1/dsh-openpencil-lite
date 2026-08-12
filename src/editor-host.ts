@@ -9,10 +9,10 @@ import {
   randomUUID,
 } from 'node:crypto'
 import { constants as fsConstants, statSync } from 'node:fs'
-import { lstat, open, rename, rm } from 'node:fs/promises'
+import { lstat, mkdtemp, open, rename, rm, writeFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from 'node:path'
 import {
   callOpenPencilMcp,
@@ -45,6 +45,7 @@ const TOKEN_PATTERN = /^[A-Za-z0-9_-]{24,128}$/
 const EDITOR_CAPABILITY_AAD = Buffer.from('dsh-openpencil/editor-capability/v1')
 const EDITOR_CAPABILITY_PREFIX = 'v1.'
 const EDITOR_CAPABILITY_MAX_LENGTH = 16 * 1024
+const EMPTY_DOCUMENT_JSON = '{\n  "version": "1.0.0",\n  "children": []\n}\n'
 
 export interface EditorGrant {
   enabled: true
@@ -131,6 +132,18 @@ export interface ActiveMcpCallOptions {
   sourcePath?: string
   ownerSessionId?: string
   signal?: AbortSignal
+}
+
+export interface CreateDocumentBatchOptions {
+  operations: string
+  canvasWidth?: number
+  postProcess?: boolean
+  signal: AbortSignal
+}
+
+export interface CreateDocumentBatchResult {
+  documentJson: string
+  result: unknown
 }
 
 function json(res: ServerResponse, status: number, value: unknown): void {
@@ -335,7 +348,9 @@ function parseHandshake(line: string): ManagedHandshake {
 async function waitForHandshake(
   child: ChildProcessWithoutNullStreams,
   diagnostics: () => string,
+  signal?: AbortSignal,
 ): Promise<ManagedHandshake> {
+  signal?.throwIfAborted()
   return new Promise((resolveHandshake, rejectHandshake) => {
     let settled = false
     let stdout = ''
@@ -346,6 +361,7 @@ async function waitForHandshake(
       child.stdout.off('data', onData)
       child.off('error', onError)
       child.off('close', onClose)
+      signal?.removeEventListener('abort', onAbort)
       if (error !== undefined) rejectHandshake(error)
       else resolveHandshake(handshake!)
     }
@@ -364,6 +380,10 @@ async function waitForHandshake(
       }
     }
     const onError = (error: Error): void => { finish(error) }
+    const onAbort = (): void => {
+      const reason = signal?.reason
+      finish(reason instanceof Error ? reason : new Error('OpenPencil editor startup was cancelled'))
+    }
     const onClose = (code: number | null): void => {
       finish(new Error(`OpenPencil editor host exited before startup (${String(code)})${diagnostics() === '' ? '' : `: ${diagnostics()}`}`))
     }
@@ -373,22 +393,29 @@ async function waitForHandshake(
     child.stdout.on('data', onData)
     child.once('error', onError)
     child.once('close', onClose)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) onAbort()
   })
 }
 
-async function waitForEditorReady(baseUrl: string): Promise<void> {
+async function waitForEditorReady(baseUrl: string, signal?: AbortSignal): Promise<void> {
   const deadline = Date.now() + READY_TIMEOUT_MS
   let last = ''
   while (Date.now() < deadline) {
+    signal?.throwIfAborted()
     try {
+      const requestSignal = signal === undefined
+        ? AbortSignal.timeout(2_000)
+        : AbortSignal.any([signal, AbortSignal.timeout(2_000)])
       const [root, glue] = await Promise.all([
-        fetch(`${baseUrl}/`, { signal: AbortSignal.timeout(2_000) }),
-        fetch(`${baseUrl}/pkg/op_host_web.js`, { signal: AbortSignal.timeout(2_000) }),
+        fetch(`${baseUrl}/`, { signal: requestSignal }),
+        fetch(`${baseUrl}/pkg/op_host_web.js`, { signal: requestSignal }),
       ])
       await Promise.all([root.arrayBuffer().catch(() => undefined), glue.arrayBuffer().catch(() => undefined)])
       if (root.status === 200 && glue.status === 200) return
       last = `root=${root.status}, bundle=${glue.status}`
     } catch (error) {
+      signal?.throwIfAborted()
       last = errorMessage(error)
     }
     await new Promise(resolveDelay => setTimeout(resolveDelay, 150))
@@ -398,26 +425,34 @@ async function waitForEditorReady(baseUrl: string): Promise<void> {
 
 const stoppingChildren = new WeakMap<ChildProcessWithoutNullStreams, Promise<void>>()
 
+function waitForChildClose(child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true)
+  return new Promise<boolean>(resolveClosed => {
+    let settled = false
+    const finish = (value: boolean): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      child.off('close', onClose)
+      resolveClosed(value)
+    }
+    const onClose = (): void => { finish(true) }
+    const timer = setTimeout(() => { finish(false) }, timeoutMs)
+    child.once('close', onClose)
+  })
+}
+
 function stopChild(child: ChildProcessWithoutNullStreams): Promise<void> {
   const current = stoppingChildren.get(child)
   if (current !== undefined) return current
-  if (child.exitCode !== null || child.killed) return Promise.resolve()
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
   const stopping = (async (): Promise<void> => {
     if (!child.stdin.writableEnded) child.stdin.end()
-    const closed = await new Promise<boolean>(resolveClosed => {
-      let settled = false
-      const finish = (value: boolean): void => {
-        if (settled) return
-        settled = true
-        clearTimeout(timer)
-        child.off('close', onClose)
-        resolveClosed(value)
-      }
-      const onClose = (): void => { finish(true) }
-      const timer = setTimeout(() => { finish(false) }, STOP_TIMEOUT_MS)
-      child.once('close', onClose)
-    })
-    if (!closed && child.exitCode === null) child.kill('SIGKILL')
+    const closed = await waitForChildClose(child, STOP_TIMEOUT_MS)
+    if (!closed && child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL')
+      await waitForChildClose(child, STOP_TIMEOUT_MS)
+    }
   })()
   stoppingChildren.set(child, stopping)
   void stopping.finally(() => {
@@ -622,6 +657,105 @@ export class EditorHostController {
     return this.#disposePromise
   }
 
+  /**
+   * Build one brand-new document without requiring a browser-owned editor.
+   * The managed daemon is transient and never enters the visible-session map,
+   * so this operation neither depends on nor retires an existing workbench.
+   * Callers publish the returned authoritative JSON through DSH's filesystem
+   * capability only after the whole batch succeeds.
+   */
+  async createDocumentBatch(options: CreateDocumentBatchOptions): Promise<CreateDocumentBatchResult> {
+    const binary = this.binary
+    if (binary === undefined) throw new Error('OpenPencil editor host binary is unavailable')
+    options.signal.throwIfAborted()
+    if (this.#disposePromise !== undefined) throw new Error('OpenPencil editor host is shutting down')
+
+    return this.#serializeLaunch(async () => {
+      options.signal.throwIfAborted()
+      if (this.#disposePromise !== undefined) throw new Error('OpenPencil editor host is shutting down')
+      return this.#createDocumentBatch(binary, options)
+    })
+  }
+
+  async #createDocumentBatch(
+    binary: string,
+    options: CreateDocumentBatchOptions,
+  ): Promise<CreateDocumentBatchResult> {
+    const tempRoot = await mkdtemp(join(tmpdir(), 'dsh-openpencil-new-'))
+    const sourcePath = join(tempRoot, 'starter.op')
+    let child: ChildProcessWithoutNullStreams | undefined
+    try {
+      await writeFile(sourcePath, EMPTY_DOCUMENT_JSON, { flag: 'wx', mode: 0o600 })
+      options.signal.throwIfAborted()
+      if (this.#disposePromise !== undefined) throw new Error('OpenPencil editor host is shutting down')
+
+      const env: NodeJS.ProcessEnv = { ...process.env }
+      const sourceRoot = sourceRootForBinary(binary)
+      if (sourceRoot !== undefined) {
+        env.OPENPENCIL_WEB_BUNDLE_DIR ??= join(sourceRoot, 'crates', 'op-host-web', 'pkg')
+        env.OPENPENCIL_CANVASKIT_DIR ??= join(sourceRoot, 'crates', 'op-host-web', 'assets', 'canvaskit')
+      }
+      child = spawn(binary, [
+        '--serve-web', '--managed', '--port', '0', '--file', sourcePath,
+        '--allow-origin', 'http://127.0.0.1',
+      ], { stdio: ['pipe', 'pipe', 'pipe'], env })
+      this.#pendingChildren.add(child)
+      let diagnostics = ''
+      child.stderr.on('data', (chunk: Buffer) => {
+        if (diagnostics.length < MAX_DIAGNOSTIC_BYTES) {
+          diagnostics += chunk.toString('utf8').slice(0, MAX_DIAGNOSTIC_BYTES - diagnostics.length)
+        }
+      })
+      const onAbort = (): void => { if (child !== undefined) void stopChild(child) }
+      options.signal.addEventListener('abort', onAbort, { once: true })
+      try {
+        const handshake = await waitForHandshake(child, () => diagnostics.trim(), options.signal)
+        options.signal.throwIfAborted()
+        const baseUrl = `http://127.0.0.1:${handshake.port}`
+        await waitForEditorReady(baseUrl, options.signal)
+        const beforeVersion = await getOpenPencilMcpVersion({
+          baseUrl,
+          token: handshake.token,
+          signal: options.signal,
+        })
+        const result = await callOpenPencilMcp({
+          baseUrl,
+          token: handshake.token,
+          tool: 'batch_design',
+          arguments: {
+            operations: options.operations,
+            ...(options.canvasWidth === undefined ? {} : { canvasWidth: options.canvasWidth }),
+            ...(options.postProcess === undefined ? {} : { postProcess: options.postProcess }),
+          },
+          signal: options.signal,
+        })
+        const afterVersion = await getOpenPencilMcpVersion({
+          baseUrl,
+          token: handshake.token,
+          signal: options.signal,
+        })
+        if (afterVersion <= beforeVersion) {
+          throw new Error('OpenPencil MCP batch_design reported success but did not create a document change')
+        }
+        options.signal.throwIfAborted()
+        const authoritative = await readManagedDaemonDocument(baseUrl, handshake.token, fetch, options.signal)
+        options.signal.throwIfAborted()
+        if (authoritative.version < afterVersion) {
+          throw new Error('OpenPencil managed document snapshot is older than the applied design batch')
+        }
+        return { documentJson: authoritative.documentJson, result: result.value }
+      } finally {
+        options.signal.removeEventListener('abort', onAbort)
+      }
+    } finally {
+      if (child !== undefined) {
+        this.#pendingChildren.delete(child)
+        await stopChild(child)
+      }
+      await rm(tempRoot, { recursive: true, force: true }).catch(() => {})
+    }
+  }
+
   /** Current live editor selection, suitable for Agent context and UI chips. */
   async getActiveSelection(options: ActiveMcpCallOptions = {}): Promise<OpenPencilSelectionSnapshot> {
     const session = this.#activeSession(options.sourcePath, options.ownerSessionId)
@@ -686,11 +820,11 @@ export class EditorHostController {
     })
   }
 
-  async #serializeLaunch(task: () => Promise<void>): Promise<void> {
+  async #serializeLaunch<T>(task: () => Promise<T>): Promise<T> {
     const run = this.#launchQueue.then(task, task)
     // A failed launch must not poison the lifecycle queue for later requests.
-    this.#launchQueue = run.catch(() => {})
-    await run
+    this.#launchQueue = run.then(() => undefined, () => undefined)
+    return await run
   }
 
   #assertLaunchLifecycle(routeGeneration: number): void {

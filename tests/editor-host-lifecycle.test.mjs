@@ -17,7 +17,8 @@ const mcpDelay = Number(process.env.FAKE_EDITOR_MCP_DELAY_MS || 0)
 const documentDelay = Number(process.env.FAKE_EDITOR_DOCUMENT_DELAY_MS || 0)
 let version = 1
 const fileIndex = process.argv.indexOf('--file')
-let document = JSON.parse(fs.readFileSync(process.argv[fileIndex + 1], 'utf8'))
+const sourcePath = process.argv[fileIndex + 1]
+let document = JSON.parse(fs.readFileSync(sourcePath, 'utf8'))
 const server = http.createServer((req, res) => {
   if (req.url === '/api/mcp/document' && req.method === 'GET') {
     const snapshot = JSON.stringify({ document, version })
@@ -109,7 +110,7 @@ function close() {
 }
 server.listen(0, '127.0.0.1', () => {
   const port = server.address().port
-  fs.appendFileSync(logPath, JSON.stringify({ pid: process.pid, port }) + '\\n')
+  fs.appendFileSync(logPath, JSON.stringify({ pid: process.pid, port, sourcePath }) + '\\n')
   setTimeout(() => {
     process.stdout.write(JSON.stringify({ ok: true, port, token: 'fake-daemon-token-123456789', version: 'test' }) + '\\n')
   }, delay)
@@ -312,6 +313,92 @@ test('editor peer classifier accepts only loopback network addresses', async () 
     '::ffff:128.0.0.1',
     '::ffff:c000:22c',
   ]) assert.equal(isLoopbackRemoteAddress(address), false, String(address))
+})
+
+test('createDocumentBatch uses a transient daemon without replacing the active editor', async () => {
+  const harness = await createHarness(0)
+  try {
+    const ownerSessionId = 'owner-visible-editor'
+    const launchResponse = await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: ownerSessionId }),
+    })
+    assert.equal(launchResponse.status, 200, await launchResponse.clone().text())
+    const launch = await launchResponse.json()
+    const [visibleHost] = await waitForHosts(harness.logPath, 1)
+    assert.equal(isAlive(visibleHost.pid), true)
+
+    const result = await harness.controller.createDocumentBatch({
+      operations: 'root=I(null, {"type":"frame","name":"Fresh design","width":390,"height":844})',
+      canvasWidth: 390,
+      postProcess: true,
+      signal: new AbortController().signal,
+    })
+    const hosts = await waitForHosts(harness.logPath, 2)
+    const transientHost = hosts[1]
+
+    await waitForExit(transientHost.pid)
+    assert.equal(isAlive(visibleHost.pid), true, 'transient generation must not retire the browser-owned editor')
+    assert.notEqual(transientHost.sourcePath, harness.sourcePath)
+    await assert.rejects(readFile(transientHost.sourcePath), error => error?.code === 'ENOENT')
+    assert.deepEqual(JSON.parse(result.documentJson).children, [
+      { id: 'node-final-batch', name: 'Mutation from batch_design' },
+    ])
+    assert.deepEqual(result.result, { applied: true })
+
+    const selection = await harness.controller.getActiveSelection({ ownerSessionId })
+    assert.equal(selection.sourcePath, harness.sourcePath)
+    const closeResponse = await harness.request(launch.closeUrl, { method: 'DELETE' })
+    assert.equal(closeResponse.status, 200)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('createDocumentBatch aborts startup and removes its transient daemon and starter', async () => {
+  const harness = await createHarness(1_000)
+  try {
+    const abort = new AbortController()
+    const creating = harness.controller.createDocumentBatch({
+      operations: 'root=I(null, {"type":"frame","name":"Cancelled"})',
+      signal: abort.signal,
+    })
+    const [transientHost] = await waitForHosts(harness.logPath, 1)
+    abort.abort(new Error('cancel new design'))
+    await assert.rejects(creating, /cancel new design/)
+    await waitForExit(transientHost.pid)
+    await assert.rejects(readFile(transientHost.sourcePath), error => error?.code === 'ENOENT')
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('controller disposal stops and joins an in-flight transient design batch', async () => {
+  const harness = await createHarness(0)
+  try {
+    process.env.FAKE_EDITOR_MCP_DELAY_MS = '1_000'
+    const creating = harness.controller.createDocumentBatch({
+      operations: 'root=I(null, {"type":"frame","name":"Disposed"})',
+      signal: new AbortController().signal,
+    })
+    const [transientHost] = await waitForHosts(harness.logPath, 1)
+    await waitForLogEvent(harness.logPath, 'mcp-start')
+    let creatingSettled = false
+    const outcome = creating.then(
+      value => ({ status: 'fulfilled', value }),
+      error => ({ status: 'rejected', error }),
+    ).finally(() => { creatingSettled = true })
+    const disposal = harness.controller.dispose()
+    await disposal
+    const creationOutcome = await outcome
+    assert.equal(creatingSettled, true, 'dispose must not resolve before the accepted transient operation settles')
+    assert.ok(creationOutcome.status === 'fulfilled' || creationOutcome.status === 'rejected')
+    await waitForExit(transientHost.pid)
+    await assert.rejects(readFile(transientHost.sourcePath), error => error?.code === 'ENOENT')
+  } finally {
+    await harness.cleanup()
+  }
 })
 
 test('editor launch capability rejects a non-loopback socket despite spoofed loopback Host and Origin', async () => {

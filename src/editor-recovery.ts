@@ -134,15 +134,17 @@ export async function readManagedDaemonDocument(
   baseUrl: string,
   token: string,
   fetcher: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<ManagedDaemonDocument> {
   const origin = daemonOrigin(baseUrl)
+  const timeout = AbortSignal.timeout(5_000)
   const response = await fetcher(new URL('/api/mcp/document', origin).href, {
     headers: {
       authorization: `Bearer ${token}`,
       'x-openpencil-token': token,
       accept: 'application/json',
     },
-    signal: AbortSignal.timeout(5_000),
+    signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
   })
   const bytes = await boundedResponseBytes(response, 'OpenPencil recovery response')
   if (!response.ok) throw new Error(`OpenPencil recovery snapshot failed (${response.status})`)

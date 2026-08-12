@@ -13,6 +13,7 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
   const routeRemovals = []
   const injectedServices = []
   const registeredTools = []
+  const emittedEvents = []
   let disposeInjectedRoutes
   let releaseEditorHostDispose
   const editorHostDisposeBarrier = new Promise(resolve => { releaseEditorHostDispose = resolve })
@@ -32,6 +33,17 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
   }
   const ctx = {
     sessions: { get() { return undefined } },
+    fs: {
+      async lstat() { return undefined },
+      async resolve(path) { return { targetKey: `test:${path}`, displayPath: path } },
+      processPath(target) { return String(target.targetKey).replace(/^test:/, '') },
+      async writeText(_target, content) {
+        return { operation: 'create', version: 'test-version', before: null, after: content }
+      },
+    },
+    sandboxPolicy: {
+      resolve() { return { mode: 'workspace-write', workspaceRoot: root } },
+    },
     get() { return undefined },
     tools: {
       register(tool) {
@@ -44,6 +56,9 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
     },
     on() {
       return () => {}
+    },
+    emit(...args) {
+      emittedEvents.push(args)
     },
     inject(services, install) {
       injectedServices.push([...services])
@@ -59,19 +74,24 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
   }
 
   try {
-    const { apply } = await import(`../lib/index.js?host-api=${Date.now()}`)
+    const { apply, inject } = await import(`../lib/index.js?host-api=${Date.now()}`)
     const disposePlugin = await apply(ctx)
 
+    assert.deepEqual(inject, ['tools', 'sessions', 'fs', 'sandboxPolicy'])
     assert.deepEqual(injectedServices, [['webServer']])
-    assert.equal(registeredTools.length, 4)
+    assert.equal(registeredTools.length, 5)
     assert.deepEqual(registeredTools.map(tool => tool.name), [
       'openpencil_render',
       'openpencil_selection',
+      'openpencil_new',
       'openpencil_create',
       'openpencil_edit',
     ])
     assert.equal(registeredTools.some(tool => tool.name === 'design_render'), false, 'legacy render alias must remain client-only')
     assert.equal(registeredTools[0].output.schema.properties.sourceTool.const, 'openpencil_render')
+    assert.deepEqual([...registeredTools[2].parameters.required].sort(), ['operations', 'path'])
+    assert.equal(registeredTools[2].output.schema.properties.created.const, true)
+    assert.deepEqual(emittedEvents, [], 'registration alone must not claim a filesystem observation')
     assert.deepEqual(
       routeRegistrations.map(route => ({ kind: route.kind, path: route.path })),
       [

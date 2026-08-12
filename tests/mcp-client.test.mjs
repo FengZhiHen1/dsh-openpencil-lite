@@ -36,3 +36,15 @@ test('projects a bounded selection snapshot with id-only fallbacks', () => {
     nodes: [{ id: 'n1', type: 'frame', name: 'Home', x: 1, y: 2, width: 375, height: 812 }],
   })
 })
+
+test('version probes time out even when the daemon never responds', async () => {
+  const fetcher = (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true })
+  })
+  await assert.rejects(mcp.getOpenPencilMcpVersion({
+    baseUrl: 'http://127.0.0.1:43123',
+    token: 'test-token',
+    fetcher,
+    timeoutMs: 10,
+  }), error => error?.name === 'TimeoutError')
+})

@@ -93,8 +93,9 @@ export interface DesignCreateArgs {
 export function createDesignCreateTool(editorHost: EditorHostController) {
   return defineTool({
     name: OPENPENCIL_CREATE_TOOL_NAME,
-    description: 'Generate or restructure design nodes directly on the active OpenPencil canvas using one transactional batch_design program. '
-      + 'The editable sidebar must already be open. Use concise newline-separated operations: '
+    description: 'Generate or restructure design nodes on an existing active OpenPencil canvas using one transactional batch_design program. '
+      + 'Use this only after the editable sidebar is already open. For a new design with no .op file or live editor, use openpencil_new instead. '
+      + 'Use concise newline-separated operations: '
       + 'I(parentId, nodeJson) inserts, U(nodeId, patchJson) updates, D(nodeId) deletes, '
       + 'M(nodeId,parentId,index) moves, C(nodeId,parentId,overrides) clones, and R(nodeId,nodeJson) replaces. '
       + 'All operations apply together or none apply. The canvas updates live but remains unsaved until the sidebar Save action.',

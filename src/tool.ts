@@ -74,11 +74,12 @@ export function createDesignRenderTool(
 ) {
   return defineTool({
     name: OPENPENCIL_RENDER_TOOL_NAME,
-    description: 'Render an OpenPencil .op design document exactly as the design canvas, '
+    description: 'Render an existing OpenPencil .op design document exactly as the design canvas, '
       + 'then show a PNG and an optional interactive read-only canvas in the conversation. '
       + 'Give the absolute path to a .op file (or a path relative to the session workspace). '
+      + 'For a new design when no .op file exists, call openpencil_new first. '
       + 'The image appears directly in the chat; the file path is returned for further use. '
-      + 'Set editable=true only when the user wants the original source opened in the full sidebar editor. '
+      + 'Set editable=true when the user asks for an editable design, and always for the immediate render after openpencil_new; no extra confirmation is needed. '
       + 'Leave width/height unset for design-accurate output. Width/height are only supported '
       + 'by the lower-fidelity Jian runtime fallback.',
     parameters: {

@@ -16,8 +16,11 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type FileSystem from '@deepseek-ai/dsh-fs'
+import type { FsObservation, FsTarget } from '@deepseek-ai/dsh-fs'
+import type SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import type ToolRegistry from '@deepseek-ai/dsh-tools'
-import type { ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
+import type { ToolExecution, ToolExecutionResult, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type { Session, SessionStore } from '@deepseek-ai/dsh-session'
 import type WebServer from '@deepseek-ai/dsh-host-webserver'
 import {
@@ -31,6 +34,7 @@ import {
   createDesignEditTool,
   createDesignSelectionTool,
 } from './design-tools.js'
+import { createDesignNewTool } from './new-tool.js'
 import {
   VIEWER_ASSET_ROUTE_PREFIX,
   prepareViewerAssets,
@@ -42,6 +46,7 @@ import {
 import {
   OPENPENCIL_CREATE_TOOL_NAME,
   OPENPENCIL_EDIT_TOOL_NAME,
+  OPENPENCIL_NEW_TOOL_NAME,
   OPENPENCIL_RENDER_TOOL_NAME,
   OPENPENCIL_SELECTION_TOOL_NAME,
   OPENPENCIL_TOOL_NAMES,
@@ -55,6 +60,7 @@ export {
   LEGACY_DESIGN_RENDER_TOOL_NAME,
   OPENPENCIL_CREATE_TOOL_NAME,
   OPENPENCIL_EDIT_TOOL_NAME,
+  OPENPENCIL_NEW_TOOL_NAME,
   OPENPENCIL_RENDER_TOOL_NAME,
   OPENPENCIL_SELECTION_TOOL_NAME,
   OPENPENCIL_TOOL_NAMES,
@@ -64,7 +70,7 @@ export {
 export const name = '@dsh-external/dsh-openpencil'
 
 /** Services this plugin's root fiber requires. */
-export const inject = ['tools', 'sessions']
+export const inject = ['tools', 'sessions', 'fs', 'sandboxPolicy']
 
 /**
  * rc.2 source worktrees augmented the legacy `cordis` package name while the
@@ -72,11 +78,17 @@ export const inject = ['tools', 'sessions']
  * structural so the same source type-checks against both without changing its
  * runtime service contract.
  */
-type HostContext = Context & { tools: ToolRegistry; sessions: SessionStore }
+type HostContext = Context & {
+  tools: ToolRegistry
+  sessions: SessionStore
+  fs: FileSystem
+  sandboxPolicy: SandboxPolicyService
+}
 
 type HostEventContext = Context & {
   on(name: 'tools/result', listener: (exec: Readonly<ToolExecution>, result: Readonly<ToolExecutionResult>) => void): () => void
   on(name: 'session/disposed', listener: (session: Session) => void): () => void
+  emit(name: 'fs/observed', target: FsTarget, observation: FsObservation, actor: ToolRunContext): void
 }
 
 /** Read the optional bind-time trust snapshot without making Web-only runtime glue a hard peer. */
@@ -125,6 +137,14 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   disposers.push(ctx.effect(
     () => hostCtx.tools.register(createDesignSelectionTool(editorHost)),
     `dsh-openpencil: ${OPENPENCIL_SELECTION_TOOL_NAME} tool`,
+  ))
+  disposers.push(ctx.effect(
+    () => hostCtx.tools.register(createDesignNewTool(editorHost, {
+      fs: hostCtx.fs,
+      sandboxPolicy: hostCtx.sandboxPolicy,
+      observe: (target, observation, exec) => eventCtx.emit('fs/observed', target, observation, exec),
+    })),
+    `dsh-openpencil: ${OPENPENCIL_NEW_TOOL_NAME} tool`,
   ))
   disposers.push(ctx.effect(
     () => hostCtx.tools.register(createDesignCreateTool(editorHost)),

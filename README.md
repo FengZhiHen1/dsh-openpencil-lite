@@ -18,6 +18,7 @@ DSH OpenPencil is an intelligent design plugin that connects DeepSeek Harness wi
 
 - `openpencil_render` creates an immutable, content-addressed `.op` snapshot and renders every top-level frame on the active page.
 - `openpencil_selection` reads the exact nodes selected in the live editor canvas.
+- `openpencil_new` creates a brand-new `.op` from one transactional `batch_design` program, saves it atomically through DSH's sandboxed filesystem, and requires no pre-opened editor.
 - `openpencil_create` applies a transactional OpenPencil `batch_design` program to generate or restructure canvas nodes.
 - `openpencil_edit` modifies an explicit node or the single node selected by the user.
 - OpenPencil's installed headless exporter is the default, design-fidelity renderer.
@@ -120,9 +121,15 @@ Published rc.2/rc.5 do not persist browser presentation metadata for tools neste
 
 For bounded replay, nested metadata recovery accepts up to 128 top-level frames; larger Code Mode results remain available through their canonical JSON fallback.
 
+## Agent design workflow
+
+For a natural-language request with no existing document, the Agent should call `openpencil_new` with a new workspace-relative `.op` path and the first complete `batch_design` program. The tool runs that program in a private managed OpenPencil daemon and publishes the authoritative document only after the whole batch succeeds. It never overwrites an existing path and a failed batch leaves no empty file behind. The Agent should then call `openpencil_render` with the returned path and `editable: true` to present the gallery and editor.
+
+Use `openpencil_create` and `openpencil_edit` only for an existing live canvas. Their edits remain unsaved until the editor Save action.
+
 ## Current limits
 
-- Canvas generation and node edits require an already-open managed editor. Changes remain unsaved until the user or Agent explicitly invokes its Save action.
+- Follow-up edits to an existing canvas require an already-open managed editor. Changes remain unsaved until the user invokes its Save action.
 - The lightweight Web SDK canvas is read-only; full editing uses the separate managed editor surface (native details sidebar when available, resizable right workbench with a full-screen option on published rc.2/rc.5).
 - The exact gallery covers top-level frames on the active page; the interactive canvas remains the way to inspect inactive pages and nested nodes.
 - Render and snapshot caches still need a product-level retention policy.

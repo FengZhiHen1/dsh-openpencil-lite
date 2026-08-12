@@ -41,6 +41,8 @@ interface McpVersionOptions {
   token: string
   signal?: AbortSignal
   fetcher?: typeof fetch
+  /** Test seam; production uses the same bounded timeout as MCP calls. */
+  timeoutMs?: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -141,9 +143,11 @@ export async function getOpenPencilMcpVersion(options: McpVersionOptions): Promi
   if (!loopback || (origin.protocol !== 'http:' && origin.protocol !== 'https:')) {
     throw new Error('OpenPencil MCP endpoint must use an HTTP loopback origin')
   }
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? MCP_TIMEOUT_MS)
+  const signal = options.signal === undefined ? timeout : AbortSignal.any([options.signal, timeout])
   const response = await (options.fetcher ?? fetch)(new URL('/api/mcp/version', origin).href, {
     headers: { authorization: `Bearer ${options.token}`, 'x-openpencil-token': options.token },
-    signal: options.signal,
+    signal,
   })
   if (!response.ok) throw new Error(`OpenPencil MCP version probe failed (${response.status})`)
   const value: unknown = await response.json()
