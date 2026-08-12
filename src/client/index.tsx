@@ -94,6 +94,10 @@ export {
   resizedEditorWorkbenchWidth,
 } from './editor-modal.js'
 export {
+  claimEditorWorkbenchDock,
+  OPENPENCIL_WORKBENCH_DOCK_ATTRIBUTE,
+} from './editor-dock-layout.js'
+export {
   createEditorWorkbenchStore,
   mountEditorWorkbenchHost,
   preserveEditorBeforeWorkbenchDispose,

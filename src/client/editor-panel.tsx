@@ -283,15 +283,15 @@ const panelStyles: Record<string, React.CSSProperties> = {
     color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-base)',
   },
   toolbar: {
-    minHeight: 42, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
+    minHeight: 48, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px 8px 12px',
     borderBottom: '1px solid var(--dsw-alias-border-l2)',
   },
-  title: { minWidth: 0, marginRight: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 },
+  title: { minWidth: 0, marginRight: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 14, lineHeight: '20px', fontWeight: 500 },
   status: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)', whiteSpace: 'nowrap' },
   button: {
     border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 6,
     color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
-    padding: '4px 8px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 'inherit', lineHeight: 1,
+    minHeight: 28, padding: '4px 8px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 'inherit', lineHeight: 1,
   },
   stage: { position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--dsw-alias-bg-base)' },
   iframe: { display: 'block', width: '100%', height: '100%', border: 0, background: 'var(--dsw-alias-bg-base)' },
@@ -360,6 +360,7 @@ export function ManagedOpenPencilEditor({
   onTakeoverRequest,
   onLifecycleState,
   onLifecycleController,
+  workbenchActions,
 }: {
   grant: PresentationGrant
   colorScheme: EditorColorScheme
@@ -368,6 +369,7 @@ export function ManagedOpenPencilEditor({
   onTakeoverRequest?: (state: EditorLifecycleState) => boolean
   onLifecycleState?: (state: EditorLifecycleState) => void
   onLifecycleController?: (controller: EditorLifecycleController | undefined) => void
+  workbenchActions?: React.ReactNode
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const launchRef = useRef<LaunchResponse>()
@@ -732,6 +734,7 @@ export function ManagedOpenPencilEditor({
         <strong style={panelStyles.title} title={documentGrant.path}>{title}</strong>
         <span style={panelStyles.status}>{phase === 'saving' ? copy.saving : dirty ? copy.unsaved : phase === 'ready' ? copy.saved : ''}</span>
         <button type="button" style={panelStyles.button} disabled={!dirty || phase === 'saving'} onClick={() => { void save() }}>{copy.save}</button>
+        {workbenchActions}
       </div>
       <div style={panelStyles.stage}>
         {launchRef.current !== undefined ? (

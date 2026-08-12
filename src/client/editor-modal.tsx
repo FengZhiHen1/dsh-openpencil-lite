@@ -1,6 +1,6 @@
 /** Plugin-owned OpenPencil workbench for DSH builds without Tool details. */
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { PresentationGrant } from './index.js'
 import { confirmEditorClose, type EditorColorScheme, type EditorLocale } from './editor-bridge.js'
@@ -10,11 +10,12 @@ import {
   type EditorLifecycleController,
   type EditorLifecycleState,
 } from './editor-panel.js'
+import { claimEditorWorkbenchDock, type EditorWorkbenchDockLease } from './editor-dock-layout.js'
 
-export const EDITOR_WORKBENCH_FULLSCREEN_BREAKPOINT = 1200
+export const EDITOR_WORKBENCH_FULLSCREEN_BREAKPOINT = 1480
 export const EDITOR_WORKBENCH_MIN_WIDTH = 640
-export const EDITOR_WORKBENCH_MAX_WIDTH = 1200
-export const EDITOR_WORKBENCH_LEFT_CLEARANCE = 480
+export const EDITOR_WORKBENCH_MAX_WIDTH = 960
+export const EDITOR_WORKBENCH_LEFT_CLEARANCE = 840
 export const EDITOR_WORKBENCH_RESIZE_STEP = 32
 
 let bodyScrollLockCount = 0
@@ -83,7 +84,7 @@ export function editorWorkbenchWidthBounds(viewportWidth: number): EditorWorkben
   const available = Math.max(0, safeViewport - EDITOR_WORKBENCH_LEFT_CLEARANCE)
   const max = Math.min(EDITOR_WORKBENCH_MAX_WIDTH, Math.max(EDITOR_WORKBENCH_MIN_WIDTH, available))
   const min = Math.min(EDITOR_WORKBENCH_MIN_WIDTH, max)
-  const preferred = Math.min(960, Math.max(720, safeViewport * 0.5))
+  const preferred = 720
   return { min, max, initial: Math.min(max, Math.max(min, preferred)) }
 }
 
@@ -146,30 +147,27 @@ export function confirmEditorModalClose(
 const styles: Record<string, React.CSSProperties> = {
   surface: {
     position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 1100,
-    minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    boxSizing: 'border-box', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
     borderLeft: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,0.5))',
     color: 'var(--dsw-alias-label-primary, #202124)',
     background: 'var(--dsw-alias-bg-base, #fff)',
-    boxShadow: '-18px 0 48px rgba(0,0,0,0.22)',
   },
-  fullscreen: { left: 0, width: 'auto', borderLeft: 0, boxShadow: 'none' },
+  fullscreen: { left: 0, width: 'auto', borderLeft: 0 },
   resizeHandle: {
-    position: 'absolute', zIndex: 2, top: 0, bottom: 0, left: -4, width: 9,
+    position: 'absolute', zIndex: 3, top: 0, bottom: 0, left: -6, width: 12,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'ew-resize', touchAction: 'none', background: 'transparent',
   },
-  header: {
-    minHeight: 46, flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
-    borderBottom: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,0.3))',
-  },
-  title: {
-    minWidth: 0, marginRight: 'auto', overflow: 'hidden', textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap', fontSize: 13, lineHeight: 1.3,
+  resizeGrip: {
+    width: 3, height: 32, flex: 'none', borderRadius: 999,
+    border: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,0.45))',
+    background: 'var(--dsw-alias-button-floating-fill, var(--dsw-alias-bg-layer-2, #fff))',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.18)', pointerEvents: 'none',
   },
   button: {
-    boxSizing: 'border-box', minHeight: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    border: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,0.45))', borderRadius: 6,
-    color: 'var(--dsw-alias-label-primary, inherit)', background: 'var(--dsw-alias-bg-layer-1, transparent)',
-    padding: '4px 9px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 'inherit', lineHeight: 1,
+    boxSizing: 'border-box', width: 28, height: 28, flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    border: 0, borderRadius: 6, color: 'var(--dsw-alias-label-secondary, inherit)', background: 'transparent',
+    padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 'inherit', lineHeight: 1,
   },
   body: { flex: 1, minHeight: 0, overflow: 'hidden' },
   focusGuard: {
@@ -205,6 +203,24 @@ function focusEditorWorkbenchBoundary(surface: HTMLElement, backwards: boolean):
   ;(target ?? surface).focus()
 }
 
+function FullscreenIcon(): React.ReactElement {
+  return <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" />
+  </svg>
+}
+
+function RestoreIcon(): React.ReactElement {
+  return <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5" />
+  </svg>
+}
+
+function CloseIcon(): React.ReactElement {
+  return <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
+  </svg>
+}
+
 export function ManagedOpenPencilEditorModal({
   grant,
   colorScheme,
@@ -229,17 +245,43 @@ export function ManagedOpenPencilEditorModal({
   const closeRef = useRef<HTMLButtonElement>(null)
   const openerRef = useRef<HTMLElement | null>(null)
   const resizeCleanupRef = useRef<() => void>()
-  const titleId = useId()
+  const dockLeaseRef = useRef<EditorWorkbenchDockLease>()
+  const dockOwnerId = useId()
   const copy = editorModalCopy(locale)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const [requestedFullscreen, setRequestedFullscreen] = useState(false)
+  const [dockUnavailable, setDockUnavailable] = useState(false)
   const [preferredWidth, setPreferredWidth] = useState(() => editorWorkbenchWidthBounds(window.innerWidth).initial)
   const [lifecycle, setLifecycle] = useState<EditorLifecycleState>(INITIAL_EDITOR_LIFECYCLE_STATE)
   const lifecycleRef = useRef<EditorLifecycleState>(INITIAL_EDITOR_LIFECYCLE_STATE)
   const lifecycleControllerRef = useRef<EditorLifecycleController>()
   const automaticFullscreen = editorWorkbenchUsesFullscreen(viewportWidth)
-  const fullscreen = automaticFullscreen || requestedFullscreen
+  const fullscreen = automaticFullscreen || requestedFullscreen || dockUnavailable
   const width = clampEditorWorkbenchWidth(preferredWidth, viewportWidth)
+
+  useLayoutEffect(() => {
+    if (fullscreen) return
+    const root = document.getElementById('root')
+    if (root === null) {
+      setDockUnavailable(true)
+      return
+    }
+    const computedMarginRight = Number.parseFloat(window.getComputedStyle(root).marginRight)
+    const lease = claimEditorWorkbenchDock(root, dockOwnerId, width, computedMarginRight)
+    if (lease === undefined) {
+      setDockUnavailable(true)
+      return
+    }
+    dockLeaseRef.current = lease
+    return () => {
+      if (dockLeaseRef.current === lease) dockLeaseRef.current = undefined
+      lease.release()
+    }
+  }, [dockOwnerId, fullscreen])
+
+  useLayoutEffect(() => {
+    if (!fullscreen) dockLeaseRef.current?.update(width)
+  }, [fullscreen, width])
 
   const closeWithoutPrompt = useCallback(() => { onClose() }, [onClose])
   const requestClose = useCallback(async () => {
@@ -382,6 +424,7 @@ export function ManagedOpenPencilEditorModal({
       liveWidth = resizedEditorWorkbenchWidth(liveWidth, appliedClientX, clientX, window.innerWidth)
       appliedClientX = clientX
       if (surface !== null) surface.style.width = `${liveWidth}px`
+      dockLeaseRef.current?.update(liveWidth)
       handle.setAttribute('aria-valuenow', String(Math.round(liveWidth)))
       return liveWidth
     }
@@ -475,7 +518,7 @@ export function ManagedOpenPencilEditorModal({
       }}
       role={fullscreen ? 'dialog' : 'complementary'}
       aria-modal={fullscreen ? true : undefined}
-      aria-labelledby={titleId}
+      aria-label={copy.title}
       data-openpencil-editor-workbench="true"
       data-openpencil-editor-workbench-owner={ownerId}
       data-openpencil-editor-modal="true"
@@ -506,27 +549,8 @@ export function ManagedOpenPencilEditorModal({
           onPointerDown={startResize}
           onKeyDown={resizeWithKeyboard}
           onDoubleClick={() => { setPreferredWidth(editorWorkbenchWidthBounds(window.innerWidth).initial) }}
-        />
+        ><span style={styles.resizeGrip} aria-hidden="true" /></div>
       ) : null}
-      <div style={styles.header}>
-        <strong id={titleId} style={styles.title}>{copy.title}</strong>
-        {!automaticFullscreen ? (
-          <button
-            type="button"
-            style={styles.button}
-            onClick={() => { setRequestedFullscreen(current => !current) }}
-          >
-            {fullscreen ? copy.restore : copy.fullscreen}
-          </button>
-        ) : null}
-        <button
-          ref={closeRef}
-          type="button"
-          style={{ ...styles.button, ...(lifecycle.phase === 'saving' ? { cursor: 'not-allowed', opacity: 0.55 } : {}) }}
-          disabled={lifecycle.phase === 'saving'}
-          onClick={() => { void requestClose() }}
-        >{copy.close}</button>
-      </div>
       <div ref={bodyRef} style={styles.body}>
         <ManagedOpenPencilEditor
           key={editorWorkbenchEditorKey(grant, sessionId)}
@@ -537,6 +561,30 @@ export function ManagedOpenPencilEditorModal({
           onTakeoverRequest={requestTakeover}
           onLifecycleState={updateLifecycle}
           onLifecycleController={updateLifecycleController}
+          workbenchActions={<>
+            {!automaticFullscreen && !dockUnavailable ? (
+              <button
+                type="button"
+                style={styles.button}
+                aria-label={fullscreen ? copy.restore : copy.fullscreen}
+                title={fullscreen ? copy.restore : copy.fullscreen}
+                onClick={() => { setRequestedFullscreen(current => !current) }}
+              >
+                {fullscreen ? <RestoreIcon /> : <FullscreenIcon />}
+              </button>
+            ) : null}
+            <button
+              ref={closeRef}
+              type="button"
+              style={{ ...styles.button, ...(lifecycle.phase === 'saving' ? { cursor: 'not-allowed', opacity: 0.55 } : {}) }}
+              aria-label={copy.close}
+              title={copy.close}
+              disabled={lifecycle.phase === 'saving'}
+              onClick={() => { void requestClose() }}
+            >
+              <CloseIcon />
+            </button>
+          </>}
         />
       </div>
       {fullscreen ? (

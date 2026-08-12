@@ -1017,31 +1017,50 @@ test('fallback editor workbench chrome follows the resolved editor locale', () =
   })
 })
 
-test('fallback editor workbench uses a wide right rail and only auto-fullscreens on small screens', () => {
-  assert.equal(client.EDITOR_WORKBENCH_FULLSCREEN_BREAKPOINT, 1200)
+test('fallback editor workbench reserves a real split dock and fullscreens before the conversation gets cramped', () => {
+  assert.equal(client.EDITOR_WORKBENCH_FULLSCREEN_BREAKPOINT, 1480)
   assert.equal(client.EDITOR_WORKBENCH_MIN_WIDTH, 640)
-  assert.equal(client.EDITOR_WORKBENCH_MAX_WIDTH, 1200)
-  assert.equal(client.EDITOR_WORKBENCH_LEFT_CLEARANCE, 480)
+  assert.equal(client.EDITOR_WORKBENCH_MAX_WIDTH, 960)
+  assert.equal(client.EDITOR_WORKBENCH_LEFT_CLEARANCE, 840)
   assert.equal(client.EDITOR_WORKBENCH_RESIZE_STEP, 32)
-  assert.equal(client.editorWorkbenchUsesFullscreen(1199), true)
-  assert.equal(client.editorWorkbenchUsesFullscreen(1200), false)
-  assert.deepEqual(client.editorWorkbenchWidthBounds(1920), { min: 640, max: 1200, initial: 960 })
-  assert.deepEqual(client.editorWorkbenchWidthBounds(1280), { min: 640, max: 800, initial: 720 })
-  assert.deepEqual(client.editorWorkbenchWidthBounds(1200), { min: 640, max: 720, initial: 720 })
-  assert.equal(client.clampEditorWorkbenchWidth(2000, 1280), 800)
+  assert.equal(client.editorWorkbenchUsesFullscreen(1479), true)
+  assert.equal(client.editorWorkbenchUsesFullscreen(1480), false)
+  assert.deepEqual(client.editorWorkbenchWidthBounds(2048), { min: 640, max: 960, initial: 720 })
+  assert.deepEqual(client.editorWorkbenchWidthBounds(1600), { min: 640, max: 760, initial: 720 })
+  assert.deepEqual(client.editorWorkbenchWidthBounds(1480), { min: 640, max: 640, initial: 640 })
+  assert.equal(client.clampEditorWorkbenchWidth(2000, 1600), 760)
   assert.equal(client.clampEditorWorkbenchWidth(100, 1280), 640)
-  assert.equal(client.resizedEditorWorkbenchWidth(720, 1000, 900, 1280), 800)
+  assert.equal(client.resizedEditorWorkbenchWidth(720, 1000, 900, 1600), 760)
   assert.equal(client.resizedEditorWorkbenchWidth(720, 1000, 1200, 1280), 640)
-  const clampedAtMax = client.resizedEditorWorkbenchWidth(800, 900, 700, 1280)
-  assert.equal(clampedAtMax, 800)
+  const clampedAtMax = client.resizedEditorWorkbenchWidth(760, 900, 700, 1600)
+  assert.equal(clampedAtMax, 760)
   assert.equal(
-    client.resizedEditorWorkbenchWidth(clampedAtMax, 700, 710, 1280),
-    790,
+    client.resizedEditorWorkbenchWidth(clampedAtMax, 700, 710, 1600),
+    750,
     'incremental drag coordinates leave a width bound immediately when the pointer reverses',
   )
-  const preferredWidth = 960
+  const preferredWidth = 720
   assert.equal(client.clampEditorWorkbenchWidth(preferredWidth, 1100), 640, 'a narrow viewport only clamps the effective width')
-  assert.equal(client.clampEditorWorkbenchWidth(preferredWidth, 1920), 960, 'widening restores the unchanged preference')
+  assert.equal(client.clampEditorWorkbenchWidth(preferredWidth, 1920), 720, 'widening restores the unchanged preference')
+})
+
+test('fallback dock owns and exactly restores the DSH root margin', () => {
+  const root = { style: { marginRight: '', minWidth: '' }, dataset: {} }
+  const lease = client.claimEditorWorkbenchDock(root, 'editor-a', 720, 0)
+  assert.ok(lease)
+  assert.equal(root.style.marginRight, '720px')
+  assert.equal(root.style.minWidth, '0')
+  assert.equal(root.dataset[client.OPENPENCIL_WORKBENCH_DOCK_ATTRIBUTE], 'editor-a')
+  lease.update(803.6)
+  assert.equal(root.style.marginRight, '804px')
+  assert.equal(client.claimEditorWorkbenchDock(root, 'editor-b', 640, 0), undefined)
+  lease.release()
+  assert.equal(root.style.marginRight, '')
+  assert.equal(root.style.minWidth, '')
+  assert.equal(root.dataset[client.OPENPENCIL_WORKBENCH_DOCK_ATTRIBUTE], undefined)
+
+  root.style.marginRight = '320px'
+  assert.equal(client.claimEditorWorkbenchDock(root, 'editor-c', 640, 320), undefined)
 })
 
 test('fullscreen editor workbench traps focus at both Tab boundaries', () => {
