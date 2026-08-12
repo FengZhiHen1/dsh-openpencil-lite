@@ -1,34 +1,139 @@
-/** Managed OpenPencil editor fallback for DSH builds without Tool details. */
+/** Plugin-owned OpenPencil workbench for DSH builds without Tool details. */
 
-import { useCallback, useEffect, useId, useRef } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { PresentationGrant } from './index.js'
 import { confirmEditorClose, type EditorColorScheme, type EditorLocale } from './editor-bridge.js'
-import { ManagedOpenPencilEditor } from './editor-panel.js'
+import {
+  INITIAL_EDITOR_LIFECYCLE_STATE,
+  ManagedOpenPencilEditor,
+  type EditorLifecycleController,
+  type EditorLifecycleState,
+} from './editor-panel.js'
 
-interface EditorModalCopy {
+export const EDITOR_WORKBENCH_FULLSCREEN_BREAKPOINT = 1200
+export const EDITOR_WORKBENCH_MIN_WIDTH = 640
+export const EDITOR_WORKBENCH_MAX_WIDTH = 1200
+export const EDITOR_WORKBENCH_LEFT_CLEARANCE = 480
+export const EDITOR_WORKBENCH_RESIZE_STEP = 32
+
+let bodyScrollLockCount = 0
+let bodyOverflowBeforeLock = ''
+
+function lockBodyScroll(): () => void {
+  if (bodyScrollLockCount === 0) {
+    bodyOverflowBeforeLock = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+  }
+  bodyScrollLockCount += 1
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    bodyScrollLockCount = Math.max(0, bodyScrollLockCount - 1)
+    if (bodyScrollLockCount === 0) document.body.style.overflow = bodyOverflowBeforeLock
+  }
+}
+
+interface EditorWorkbenchCopy {
   title: string
   close: string
+  fullscreen: string
+  restore: string
+  resize: string
   discard: string
 }
 
-const EDITOR_MODAL_COPY: Record<EditorLocale, EditorModalCopy> = {
+const EDITOR_WORKBENCH_COPY: Record<EditorLocale, EditorWorkbenchCopy> = {
   'zh-CN': {
     title: 'OpenPencil 编辑器',
     close: '关闭',
+    fullscreen: '全屏',
+    restore: '退出全屏',
+    resize: '拖动调整编辑区宽度',
     discard: 'OpenPencil 中有未保存的更改，确定关闭并放弃吗？',
   },
   'en-US': {
     title: 'OpenPencil editor',
     close: 'Close',
+    fullscreen: 'Full screen',
+    restore: 'Exit full screen',
+    resize: 'Drag to resize the editor',
     discard: 'OpenPencil has unsaved changes. Close and discard them?',
   },
 }
 
-export function editorModalCopy(locale: EditorLocale): EditorModalCopy {
-  return EDITOR_MODAL_COPY[locale]
+export function editorModalCopy(locale: EditorLocale): EditorWorkbenchCopy {
+  return EDITOR_WORKBENCH_COPY[locale]
 }
 
-/** Read the editor's durable dirty marker before allowing the modal to close. */
+export function editorWorkbenchUsesFullscreen(viewportWidth: number): boolean {
+  return !Number.isFinite(viewportWidth) || viewportWidth < EDITOR_WORKBENCH_FULLSCREEN_BREAKPOINT
+}
+
+export interface EditorWorkbenchWidthBounds {
+  min: number
+  max: number
+  initial: number
+}
+
+/** Keep useful DSH conversation space while allowing a large desktop canvas. */
+export function editorWorkbenchWidthBounds(viewportWidth: number): EditorWorkbenchWidthBounds {
+  const safeViewport = Number.isFinite(viewportWidth) ? Math.max(0, viewportWidth) : 0
+  const available = Math.max(0, safeViewport - EDITOR_WORKBENCH_LEFT_CLEARANCE)
+  const max = Math.min(EDITOR_WORKBENCH_MAX_WIDTH, Math.max(EDITOR_WORKBENCH_MIN_WIDTH, available))
+  const min = Math.min(EDITOR_WORKBENCH_MIN_WIDTH, max)
+  const preferred = Math.min(960, Math.max(720, safeViewport * 0.5))
+  return { min, max, initial: Math.min(max, Math.max(min, preferred)) }
+}
+
+export function clampEditorWorkbenchWidth(width: number, viewportWidth: number): number {
+  const bounds = editorWorkbenchWidthBounds(viewportWidth)
+  const safeWidth = Number.isFinite(width) ? width : bounds.initial
+  return Math.min(bounds.max, Math.max(bounds.min, safeWidth))
+}
+
+/** A left-edge drag grows the right-docked workbench as the pointer moves left. */
+export function resizedEditorWorkbenchWidth(
+  startWidth: number,
+  startClientX: number,
+  clientX: number,
+  viewportWidth: number,
+): number {
+  return clampEditorWorkbenchWidth(startWidth + startClientX - clientX, viewportWidth)
+}
+
+/** Key only the editor process; outer workbench geometry remains stable. */
+export function editorWorkbenchEditorKey(grant: PresentationGrant, sessionId: string): string {
+  return `${sessionId}\n${grant.editor?.launchUrl ?? ''}`
+}
+
+/**
+ * Return the focus target used at a fullscreen Tab boundary.
+ *
+ * `activeIndex` is -1 when focus is outside the workbench. Returning -1 means
+ * normal browser tab order should continue inside the workbench.
+ */
+export function editorWorkbenchFocusTargetIndex(
+  focusableCount: number,
+  activeIndex: number,
+  backwards: boolean,
+): number {
+  if (!Number.isInteger(focusableCount) || focusableCount <= 0) return -1
+  if (!Number.isInteger(activeIndex) || activeIndex < 0 || activeIndex >= focusableCount) {
+    return backwards ? focusableCount - 1 : 0
+  }
+  if (backwards && activeIndex === 0) return focusableCount - 1
+  if (!backwards && activeIndex === focusableCount - 1) return 0
+  return -1
+}
+
+/** Side mode is non-modal, so Escape only belongs to it while focus is inside. */
+export function editorWorkbenchShouldHandleEscape(fullscreen: boolean, targetInside: boolean): boolean {
+  return fullscreen || targetInside
+}
+
+/** Read the editor's durable dirty marker before allowing the workbench to close. */
 export function confirmEditorModalClose(
   root: Pick<ParentNode, 'querySelector'> | null,
   message: string,
@@ -38,34 +143,66 @@ export function confirmEditorModalClose(
   return confirmEditorClose(dirty, () => confirm(message))
 }
 
-const modalStyles: Record<string, React.CSSProperties> = {
-  backdrop: {
-    position: 'fixed', inset: 0, zIndex: 2147483000,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: 20, background: 'rgba(0,0,0,0.72)',
+const styles: Record<string, React.CSSProperties> = {
+  surface: {
+    position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 1100,
+    minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    borderLeft: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,0.5))',
+    color: 'var(--dsw-alias-label-primary, #202124)',
+    background: 'var(--dsw-alias-bg-base, #fff)',
+    boxShadow: '-18px 0 48px rgba(0,0,0,0.22)',
   },
-  dialog: {
-    width: 'min(1440px, 96vw)', height: 'min(960px, 94vh)', minWidth: 0, minHeight: 0,
-    display: 'flex', flexDirection: 'column', overflow: 'hidden',
-    border: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,0.5))', borderRadius: 10,
-    color: 'var(--dsw-alias-label-primary, #eee)', background: 'var(--dsw-alias-bg-base, #17171a)',
-    boxShadow: '0 24px 80px rgba(0,0,0,0.45)',
+  fullscreen: { left: 0, width: 'auto', borderLeft: 0, boxShadow: 'none' },
+  resizeHandle: {
+    position: 'absolute', zIndex: 2, top: 0, bottom: 0, left: -4, width: 9,
+    cursor: 'ew-resize', touchAction: 'none', background: 'transparent',
   },
   header: {
-    minHeight: 44, display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+    minHeight: 46, flex: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
     borderBottom: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,0.3))',
   },
   title: {
     minWidth: 0, marginRight: 'auto', overflow: 'hidden', textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap', fontSize: 13,
+    whiteSpace: 'nowrap', fontSize: 13, lineHeight: 1.3,
   },
-  close: {
-    minHeight: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  button: {
+    boxSizing: 'border-box', minHeight: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     border: '1px solid var(--dsw-alias-border-l2, rgba(128,128,128,0.45))', borderRadius: 6,
     color: 'var(--dsw-alias-label-primary, inherit)', background: 'var(--dsw-alias-bg-layer-1, transparent)',
-    padding: '4px 9px', cursor: 'pointer', font: 'inherit', fontSize: 12, lineHeight: 1,
+    padding: '4px 9px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 'inherit', lineHeight: 1,
   },
   body: { flex: 1, minHeight: 0, overflow: 'hidden' },
+  focusGuard: {
+    position: 'fixed', width: 1, height: 1, padding: 0, margin: 0,
+    overflow: 'hidden', opacity: 0, pointerEvents: 'none',
+  },
+}
+
+const EDITOR_WORKBENCH_FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'iframe:not([tabindex="-1"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',')
+
+function editorWorkbenchFocusableElements(surface: HTMLElement): HTMLElement[] {
+  return Array.from(surface.querySelectorAll<HTMLElement>(EDITOR_WORKBENCH_FOCUSABLE_SELECTOR))
+    .filter(element => {
+      if (element.dataset.openpencilFocusGuard === 'true') return false
+      if (element.hidden || element.getAttribute('aria-hidden') === 'true') return false
+      if (element.closest('[hidden], [inert], [aria-hidden="true"]')) return false
+      const style = window.getComputedStyle(element)
+      return style.display !== 'none' && style.visibility !== 'hidden'
+    })
+}
+
+function focusEditorWorkbenchBoundary(surface: HTMLElement, backwards: boolean): void {
+  const focusable = editorWorkbenchFocusableElements(surface)
+  const target = backwards ? focusable.at(-1) : focusable[0]
+  ;(target ?? surface).focus()
 }
 
 export function ManagedOpenPencilEditorModal({
@@ -73,56 +210,275 @@ export function ManagedOpenPencilEditorModal({
   colorScheme,
   locale,
   sessionId,
+  ownerId,
+  onLifecycleState,
+  onLifecycleController,
   onClose,
 }: {
   grant: PresentationGrant
   colorScheme: EditorColorScheme
   locale: EditorLocale
   sessionId: string
+  ownerId?: string
+  onLifecycleState?: (state: EditorLifecycleState) => void
+  onLifecycleController?: (controller: EditorLifecycleController | undefined) => void
   onClose: () => void
 }) {
   const bodyRef = useRef<HTMLDivElement>(null)
+  const surfaceRef = useRef<HTMLElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
+  const openerRef = useRef<HTMLElement | null>(null)
+  const resizeCleanupRef = useRef<() => void>()
   const titleId = useId()
   const copy = editorModalCopy(locale)
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
+  const [requestedFullscreen, setRequestedFullscreen] = useState(false)
+  const [preferredWidth, setPreferredWidth] = useState(() => editorWorkbenchWidthBounds(window.innerWidth).initial)
+  const [lifecycle, setLifecycle] = useState<EditorLifecycleState>(INITIAL_EDITOR_LIFECYCLE_STATE)
+  const lifecycleRef = useRef<EditorLifecycleState>(INITIAL_EDITOR_LIFECYCLE_STATE)
+  const lifecycleControllerRef = useRef<EditorLifecycleController>()
+  const automaticFullscreen = editorWorkbenchUsesFullscreen(viewportWidth)
+  const fullscreen = automaticFullscreen || requestedFullscreen
+  const width = clampEditorWorkbenchWidth(preferredWidth, viewportWidth)
 
-  const requestClose = useCallback(() => {
-    if (!confirmEditorModalClose(bodyRef.current, copy.discard)) return
-    onClose()
-  }, [copy.discard, onClose])
+  const closeWithoutPrompt = useCallback(() => { onClose() }, [onClose])
+  const requestClose = useCallback(async () => {
+    if (lifecycleRef.current.phase === 'saving') return
+    if (!confirmEditorClose(lifecycleRef.current.dirty, () => window.confirm(copy.discard))) return
+    if (lifecycleControllerRef.current !== undefined) {
+      const closed = await lifecycleControllerRef.current.requestClose()
+      if (!closed) return
+    }
+    closeWithoutPrompt()
+  }, [closeWithoutPrompt, copy.discard])
+  const requestTakeover = useCallback((_state: EditorLifecycleState): boolean => {
+    // The page-wide coordinator is synchronous, while a guarded daemon DELETE
+    // is asynchronous and may fail. Veto this shortcut: the stable workbench
+    // host performs close/replace through lifecycleController.requestClose().
+    return false
+  }, [])
+  const updateLifecycle = useCallback((next: EditorLifecycleState) => {
+    lifecycleRef.current = next
+    setLifecycle(next)
+    onLifecycleState?.(next)
+  }, [onLifecycleState])
+  const updateLifecycleController = useCallback((next: EditorLifecycleController | undefined) => {
+    lifecycleControllerRef.current = next
+    onLifecycleController?.(next)
+  }, [onLifecycleController])
 
   useEffect(() => {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const mountedSurface = surfaceRef.current
     closeRef.current?.focus()
+    return () => {
+      const opener = openerRef.current
+      const activeElement = document.activeElement
+      const focusStayedInWorkbench = activeElement === document.body
+        || (activeElement !== null && mountedSurface?.contains(activeElement))
+      if (focusStayedInWorkbench && opener?.isConnected === true) opener.focus()
+    }
+  }, [])
+
+  useEffect(() => {
+    const onResize = (): void => {
+      setViewportWidth(window.innerWidth)
+    }
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize) }
+  }, [])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
+      const surface = surfaceRef.current
+      const targetInside = event.target instanceof Node && surface?.contains(event.target) === true
+      if (!editorWorkbenchShouldHandleEscape(fullscreen, targetInside)) return
       event.preventDefault()
       requestClose()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => { window.removeEventListener('keydown', onKeyDown) }
-  }, [requestClose])
+  }, [fullscreen, requestClose])
 
-  return (
-    <div
-      style={modalStyles.backdrop}
-      role="presentation"
+  useEffect(() => {
+    if (!fullscreen) return
+    const surface = surfaceRef.current
+    if (!surface) return
+
+    const containFocus = (event: FocusEvent): void => {
+      if (event.target instanceof Node && surface.contains(event.target)) return
+      focusEditorWorkbenchBoundary(surface, false)
+    }
+    const wrapTab = (event: KeyboardEvent): void => {
+      if (event.key !== 'Tab') return
+      const focusable = editorWorkbenchFocusableElements(surface)
+      const activeIndex = focusable.indexOf(document.activeElement as HTMLElement)
+      const targetIndex = editorWorkbenchFocusTargetIndex(focusable.length, activeIndex, event.shiftKey)
+      if (targetIndex < 0) return
+      event.preventDefault()
+      event.stopPropagation()
+      focusable[targetIndex]?.focus()
+    }
+
+    document.addEventListener('focusin', containFocus, true)
+    document.addEventListener('keydown', wrapTab, true)
+    if (!surface.contains(document.activeElement)) focusEditorWorkbenchBoundary(surface, false)
+    return () => {
+      document.removeEventListener('focusin', containFocus, true)
+      document.removeEventListener('keydown', wrapTab, true)
+    }
+  }, [fullscreen])
+
+  useEffect(() => {
+    if (!fullscreen) return
+    return lockBodyScroll()
+  }, [fullscreen])
+
+  useEffect(() => () => { resizeCleanupRef.current?.() }, [])
+  useEffect(() => {
+    if (fullscreen) resizeCleanupRef.current?.()
+  }, [fullscreen])
+
+  const startResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (fullscreen) return
+    event.preventDefault()
+    resizeCleanupRef.current?.()
+    const startWidth = width
+    const startClientX = event.clientX
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.cursor = 'ew-resize'
+    document.body.style.userSelect = 'none'
+    let animationFrame: number | undefined
+    let nextClientX = startClientX
+    const onMove = (moveEvent: PointerEvent): void => {
+      nextClientX = moveEvent.clientX
+      if (animationFrame !== undefined) return
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = undefined
+        setPreferredWidth(resizedEditorWorkbenchWidth(startWidth, startClientX, nextClientX, window.innerWidth))
+      })
+    }
+    const stop = (): void => {
+      if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', stop)
+      window.removeEventListener('pointercancel', stop)
+      window.removeEventListener('blur', stop)
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+      resizeCleanupRef.current = undefined
+    }
+    resizeCleanupRef.current = stop
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', stop)
+    window.addEventListener('pointercancel', stop)
+    window.addEventListener('blur', stop)
+  }, [fullscreen, width])
+
+  const resizeWithKeyboard = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (fullscreen) return
+    const bounds = editorWorkbenchWidthBounds(window.innerWidth)
+    let next: number | undefined
+    if (event.key === 'ArrowLeft') next = width + EDITOR_WORKBENCH_RESIZE_STEP
+    if (event.key === 'ArrowRight') next = width - EDITOR_WORKBENCH_RESIZE_STEP
+    if (event.key === 'Home') next = bounds.min
+    if (event.key === 'End') next = bounds.max
+    if (next === undefined) return
+    event.preventDefault()
+    setPreferredWidth(clampEditorWorkbenchWidth(next, window.innerWidth))
+  }, [fullscreen, width])
+
+  const surface = (
+    <section
+      ref={surfaceRef}
+      style={{
+        ...styles.surface,
+        ...(fullscreen ? styles.fullscreen : { width }),
+        ...(colorScheme === 'dark' ? {
+          color: 'var(--dsw-alias-label-primary, #eee)',
+          background: 'var(--dsw-alias-bg-base, #17171a)',
+        } : {}),
+      }}
+      role={fullscreen ? 'dialog' : 'complementary'}
+      aria-modal={fullscreen ? true : undefined}
+      aria-labelledby={titleId}
+      data-openpencil-editor-workbench="true"
+      data-openpencil-editor-workbench-owner={ownerId}
       data-openpencil-editor-modal="true"
-      onMouseDown={(event) => { if (event.target === event.currentTarget) requestClose() }}
+      data-openpencil-editor-mode={fullscreen ? 'fullscreen' : 'side'}
+      tabIndex={-1}
     >
-      <section style={modalStyles.dialog} role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <div style={modalStyles.header}>
-          <strong id={titleId} style={modalStyles.title}>{copy.title}</strong>
-          <button ref={closeRef} type="button" style={modalStyles.close} onClick={requestClose}>{copy.close}</button>
-        </div>
-        <div ref={bodyRef} style={modalStyles.body}>
-          <ManagedOpenPencilEditor
-            grant={grant}
-            colorScheme={colorScheme}
-            locale={locale}
-            sessionId={sessionId}
-          />
-        </div>
-      </section>
-    </div>
+      {fullscreen ? (
+        <span
+          data-openpencil-focus-guard="true"
+          style={styles.focusGuard}
+          tabIndex={0}
+          onFocus={() => {
+            if (surfaceRef.current) focusEditorWorkbenchBoundary(surfaceRef.current, true)
+          }}
+        />
+      ) : null}
+      {!fullscreen ? (
+        <div
+          style={styles.resizeHandle}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={copy.resize}
+          aria-valuemin={editorWorkbenchWidthBounds(viewportWidth).min}
+          aria-valuemax={editorWorkbenchWidthBounds(viewportWidth).max}
+          aria-valuenow={Math.round(width)}
+          tabIndex={0}
+          title={copy.resize}
+          onPointerDown={startResize}
+          onKeyDown={resizeWithKeyboard}
+          onDoubleClick={() => { setPreferredWidth(editorWorkbenchWidthBounds(window.innerWidth).initial) }}
+        />
+      ) : null}
+      <div style={styles.header}>
+        <strong id={titleId} style={styles.title}>{copy.title}</strong>
+        {!automaticFullscreen ? (
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => { setRequestedFullscreen(current => !current) }}
+          >
+            {fullscreen ? copy.restore : copy.fullscreen}
+          </button>
+        ) : null}
+        <button
+          ref={closeRef}
+          type="button"
+          style={{ ...styles.button, ...(lifecycle.phase === 'saving' ? { cursor: 'not-allowed', opacity: 0.55 } : {}) }}
+          disabled={lifecycle.phase === 'saving'}
+          onClick={() => { void requestClose() }}
+        >{copy.close}</button>
+      </div>
+      <div ref={bodyRef} style={styles.body}>
+        <ManagedOpenPencilEditor
+          key={editorWorkbenchEditorKey(grant, sessionId)}
+          grant={grant}
+          colorScheme={colorScheme}
+          locale={locale}
+          sessionId={sessionId}
+          onTakeoverRequest={requestTakeover}
+          onLifecycleState={updateLifecycle}
+          onLifecycleController={updateLifecycleController}
+        />
+      </div>
+      {fullscreen ? (
+        <span
+          data-openpencil-focus-guard="true"
+          style={styles.focusGuard}
+          tabIndex={0}
+          onFocus={() => {
+            if (surfaceRef.current) focusEditorWorkbenchBoundary(surfaceRef.current, false)
+          }}
+        />
+      ) : null}
+    </section>
   )
+
+  return createPortal(surface, document.body)
 }

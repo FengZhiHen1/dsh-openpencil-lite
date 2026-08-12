@@ -138,16 +138,16 @@ export function editorMessageFrom(
 
 interface ActiveEditor {
   readonly token: symbol
-  readonly close: () => void
+  readonly close: () => boolean | void
 }
 
 let activeEditor: ActiveEditor | undefined
 
-/** Page-wide single-editor coordinator. Opening a new document closes the old daemon. */
-export function claimEditor(token: symbol, close: () => void): () => void {
+/** Page-wide single-editor coordinator. An existing dirty editor may veto takeover. */
+export function claimEditor(token: symbol, close: () => boolean | void): (() => void) | undefined {
   const previous = activeEditor
+  if (previous !== undefined && previous.token !== token && previous.close() === false) return undefined
   activeEditor = { token, close }
-  if (previous !== undefined && previous.token !== token) previous.close()
   return () => {
     if (activeEditor?.token === token) activeEditor = undefined
   }

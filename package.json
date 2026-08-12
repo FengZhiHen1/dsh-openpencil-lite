@@ -1,7 +1,7 @@
 {
   "name": "@dsh-external/dsh-openpencil",
   "version": "0.0.1",
-  "description": "OpenPencil plugin for DSH with exact multi-frame previews, an interactive canvas, and managed sidebar editing.",
+  "description": "OpenPencil plugin for DSH with exact multi-frame previews, an interactive canvas, and managed editor workbenches.",
   "license": "MIT",
   "keywords": [
     "dsh",
@@ -42,7 +42,7 @@
   ],
   "scripts": {
     "build": "node scripts/run-tool.mjs tsc -p tsconfig.json && npm run build:client",
-    "build:client": "node scripts/run-tool.mjs tsc -p tsconfig.client.json && node scripts/run-tool.mjs tsdown src/client/index.tsx --format cjs --platform browser --target es2022 --tsconfig tsconfig.client.json --deps.never-bundle react --deps.never-bundle react/jsx-runtime --out-dir .client-build --clean --sourcemap --logLevel warn && node scripts/build-client.mjs",
+    "build:client": "node scripts/run-tool.mjs tsc -p tsconfig.client.json && node scripts/run-tool.mjs tsdown src/client/index.tsx --format cjs --platform browser --target es2022 --tsconfig tsconfig.client.json --deps.never-bundle react --deps.never-bundle react/jsx-runtime --deps.never-bundle react-dom --deps.never-bundle react-dom/client --out-dir .client-build --clean --sourcemap --logLevel warn && node scripts/build-client.mjs",
     "sync:viewer-assets": "node scripts/sync-viewer-assets.mjs",
     "test:viewer-assets": "node scripts/test-viewer-assets.mjs",
     "test:client": "npm run build:client && node --test tests/client.test.mjs",
@@ -76,11 +76,13 @@
     "@deepseek-ai/dsh-client-ui-tool": "^0.0.1-rc.2",
     "@deepseek-ai/dsh-host-webserver": "^0.0.1-rc.2",
     "@deepseek-ai/dsh-tools": "^0.0.1-rc.2",
-    "react": "^18.2.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.1",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3"
   }

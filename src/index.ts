@@ -61,12 +61,17 @@ export const name = '@dsh-external/dsh-openpencil'
 export const inject = ['tools']
 
 /** Plugin entry: mount every model-facing contribution. */
-export async function apply(ctx: Context): Promise<() => void> {
-  const disposers: Array<() => void> = []
+export async function apply(ctx: Context): Promise<() => Promise<void>> {
+  const disposers: Array<() => void | Promise<void>> = []
   const accessKey = await prepareRenderAccessKey()
   const controller = new RenderAccessController(accessKey)
   const viewerAssets = await prepareViewerAssets()
   const editorHost = new EditorHostController(accessKey)
+  let editorHostDisposePromise: Promise<void> | undefined
+  const disposeEditorHost = (): Promise<void> => {
+    editorHostDisposePromise ??= editorHost.dispose()
+    return editorHostDisposePromise
+  }
 
   // Tool registration: global (every agent sees it). The tool's
   // presentationMeta consults `controller.routeAvailable`, so a profile
@@ -119,19 +124,19 @@ export async function apply(ctx: Context): Promise<() => void> {
       path: EDITOR_ROUTE_PREFIX,
       handler: (req, res) => editorHost.handle(req, res),
     })
-    return () => {
+    return async () => {
       disposeEditorRoute()
       detachEditor()
-      void editorHost.dispose()
       disposeViewerRoute?.()
       disposeRoute()
       detach()
+      await disposeEditorHost()
     }
   }, 'dsh-openpencil: render route'))
 
   ctx.logger.info(`dsh-openpencil mounted (${OPENPENCIL_TOOL_NAMES.join(' + ')}; viewer assets: ${viewerAssets.available ? 'ready' : 'unavailable'}; editor: ${editorHost.available ? 'ready' : 'unavailable'})`)
-  return () => {
-    for (const dispose of disposers.reverse()) dispose()
-    void editorHost.dispose()
+  return async () => {
+    for (const dispose of disposers.reverse()) await dispose()
+    await disposeEditorHost()
   }
 }

@@ -27,7 +27,9 @@ import {
   type CompatibleToolCallViewProps,
   type CompatibleToolDetailsViewProps,
 } from './details-compat.js'
-import { ManagedOpenPencilEditorModal } from './editor-modal.js'
+import type { EditorWorkbenchRequest } from './editor-workbench-host.js'
+import { mountEditorWorkbenchHost } from './editor-workbench-host.js'
+import { editorWorkbenchEditorKey } from './editor-modal.js'
 import { FrameGallery, normalizeFrameIndex as normalizedFrameIndex } from './frame-gallery.js'
 import type { GalleryFrame, GalleryLocale } from './frame-gallery.js'
 import { OpenPencilSelectionDock } from './selection-dock.js'
@@ -61,6 +63,7 @@ export {
   normalizeFrameIndex,
 } from './frame-gallery.js'
 export {
+  applyManagedEditorUnmountPolicy,
   closeManagedEditorLaunch,
   editorPanelCopy,
   launchManagedEditor,
@@ -71,15 +74,40 @@ export {
   requestOpenPencilEditor,
 } from './details-compat.js'
 export {
+  clampEditorWorkbenchWidth,
   confirmEditorModalClose,
   editorModalCopy,
+  editorWorkbenchEditorKey,
+  editorWorkbenchFocusTargetIndex,
+  editorWorkbenchShouldHandleEscape,
+  editorWorkbenchUsesFullscreen,
+  editorWorkbenchWidthBounds,
+  EDITOR_WORKBENCH_FULLSCREEN_BREAKPOINT,
+  EDITOR_WORKBENCH_LEFT_CLEARANCE,
+  EDITOR_WORKBENCH_MAX_WIDTH,
+  EDITOR_WORKBENCH_MIN_WIDTH,
+  EDITOR_WORKBENCH_RESIZE_STEP,
+  resizedEditorWorkbenchWidth,
 } from './editor-modal.js'
+export {
+  createEditorWorkbenchStore,
+  mountEditorWorkbenchHost,
+  preserveEditorBeforeWorkbenchDispose,
+} from './editor-workbench-host.js'
 export {
   editorGrantForBoot,
   editorSuccessorFromSave,
   editorSuccessorStorageKey,
   rememberEditorSuccessor,
 } from './editor-successor.js'
+export {
+  captureManagedEditorRecovery,
+  discardManagedEditorRecovery,
+  editorRecoveryCopy,
+  editorRecoveryItemUrl,
+  editorRecoverySummaryOf,
+  restoreManagedEditorRecovery,
+} from './editor-recovery.js'
 
 export {
   claimEditor,
@@ -662,13 +690,11 @@ export function DesignRenderView({
   openFile,
   inspect,
   locale = 'en',
-  colorScheme = 'light',
-  editorLocale,
   sessionId,
+  openEditorWorkbench,
 }: CompatibleToolCallViewProps & {
   locale?: PresentationLocale
-  colorScheme?: EditorColorScheme
-  editorLocale?: EditorLocale
+  openEditorWorkbench?: (request: EditorWorkbenchRequest) => boolean | Promise<boolean>
 }) {
   const settled = 'kind' in block
   const error = settled && block.isError
@@ -681,9 +707,7 @@ export function DesignRenderView({
   const currentFrameIndex = normalizedFrameIndex(selectedFrameIndex, frames.length)
   const selectedFrame = frames[currentFrameIndex] ?? grant?.image
   const [modalToken, setModalToken] = useState<symbol>()
-  const [editorModalOpen, setEditorModalOpen] = useState(false)
   const releaseRef = useRef<() => void>()
-  const resolvedEditorLocale = editorLocale ?? editorLocaleFromDsh(locale)
 
   const closeCanvas = useCallback(() => {
     releaseRef.current?.()
@@ -701,8 +725,11 @@ export function DesignRenderView({
   }, [])
 
   const openEditor = useCallback(() => {
-    requestOpenPencilEditor(openDetails, () => { setEditorModalOpen(true) })
-  }, [openDetails])
+    requestOpenPencilEditor(openDetails, () => {
+      if (grant === undefined) return
+      void openEditorWorkbench?.({ grant, sessionId: String(sessionId) })
+    })
+  }, [grant, openDetails, openEditorWorkbench, sessionId])
 
   useEffect(() => () => { releaseRef.current?.() }, [])
   useEffect(() => { setSelectedFrameIndex(0) }, [frames.map(frame => frame.previewUrl).join('\n')])
@@ -754,15 +781,6 @@ export function DesignRenderView({
         ) : null}
       </div>
       {modalToken !== undefined && grant?.document !== undefined && grant.viewer !== undefined ? <CanvasModal grant={grant} onClose={closeCanvas} locale={locale} /> : null}
-      {editorModalOpen && grant?.document !== undefined && grant.editor?.enabled === true ? (
-        <ManagedOpenPencilEditorModal
-          grant={grant}
-          colorScheme={colorScheme}
-          locale={resolvedEditorLocale}
-          sessionId={String(sessionId)}
-          onClose={() => { setEditorModalOpen(false) }}
-        />
-      ) : null}
     </section>
   )
 }
@@ -776,7 +794,13 @@ export function OpenPencilEditorPanel({ block, colorScheme, locale, sessionId }:
   if (grant?.editor === undefined || grant.document === undefined) {
     return <div style={styles.overlay}>{editorPanelCopy(locale).unavailable}</div>
   }
-  return <ManagedOpenPencilEditor grant={grant} colorScheme={colorScheme} locale={locale} sessionId={String(sessionId)} />
+  return <ManagedOpenPencilEditor
+    key={editorWorkbenchEditorKey(grant, String(sessionId))}
+    grant={grant}
+    colorScheme={colorScheme}
+    locale={locale}
+    sessionId={String(sessionId)}
+  />
 }
 
 /** Required client services. */
@@ -789,15 +813,29 @@ export function apply(ctx: ClientContext): void {
   const subscribeLocale = (notify: () => void): (() => boolean) => ctx.on('locale/change', notify)
   const getLocale = (): PresentationLocale => ctx.locale.getLocale().active
   const getEditorLocale = (): EditorLocale => editorLocaleFromDsh(getLocale())
+  let editorWorkbenchHost: ReturnType<typeof mountEditorWorkbenchHost> | undefined
+  if (typeof document !== 'undefined') {
+    ctx.effect(() => {
+      const host = mountEditorWorkbenchHost({
+        subscribeTheme,
+        getColorScheme,
+        subscribeLocale,
+        getLocale,
+      })
+      editorWorkbenchHost = host
+      return () => {
+        if (editorWorkbenchHost === host) editorWorkbenchHost = undefined
+        return host.dispose()
+      }
+    }, 'dsh-openpencil: fallback editor workbench host')
+  }
   const HostSyncedDesignRenderView = (props: ToolCallViewProps): React.JSX.Element => {
     const locale = useSyncExternalStore(subscribeLocale, getLocale, getLocale)
-    const colorScheme = useSyncExternalStore(subscribeTheme, getColorScheme, getColorScheme)
     return (
       <DesignRenderView
         {...props}
         locale={locale}
-        editorLocale={editorLocaleFromDsh(locale)}
-        colorScheme={colorScheme}
+        openEditorWorkbench={request => editorWorkbenchHost?.open(request) ?? false}
       />
     )
   }

@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { createHash, randomBytes } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import { createServer, request as httpRequest } from 'node:http'
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { PassThrough } from 'node:stream'
 import { test } from 'node:test'
 
 const fakeHostSource = `#!/usr/bin/env node
@@ -11,7 +13,89 @@ const fs = require('node:fs')
 const http = require('node:http')
 const delay = Number(process.env.FAKE_EDITOR_HANDSHAKE_DELAY_MS || 0)
 const logPath = process.env.FAKE_EDITOR_LOG
-const server = http.createServer((_req, res) => {
+const mcpDelay = Number(process.env.FAKE_EDITOR_MCP_DELAY_MS || 0)
+const documentDelay = Number(process.env.FAKE_EDITOR_DOCUMENT_DELAY_MS || 0)
+let version = 1
+const fileIndex = process.argv.indexOf('--file')
+let document = JSON.parse(fs.readFileSync(process.argv[fileIndex + 1], 'utf8'))
+const server = http.createServer((req, res) => {
+  if (req.url === '/api/mcp/document' && req.method === 'GET') {
+    const snapshot = JSON.stringify({ document, version })
+    fs.appendFileSync(logPath, JSON.stringify({ event: 'document-read-start' }) + '\\n')
+    setTimeout(() => {
+      res.statusCode = 200
+      res.setHeader('content-type', 'application/json')
+      res.end(snapshot)
+    }, documentDelay)
+    return
+  }
+  if (req.url === '/api/mcp/document' && req.method === 'POST') {
+    let body = ''
+    req.on('data', chunk => { body += chunk })
+    req.on('end', () => {
+      const value = JSON.parse(body)
+      if (value.baseVersion !== version) {
+        res.statusCode = 409
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ ok: false, error: 'version-conflict', version }))
+        return
+      }
+      document = value.document
+      version += 1
+      res.statusCode = 200
+      res.setHeader('content-type', 'application/json')
+      res.end(JSON.stringify({ ok: true, version }))
+    })
+    return
+  }
+  if (req.url === '/api/mcp/version') {
+    res.statusCode = 200
+    res.setHeader('content-type', 'application/json')
+    res.end(JSON.stringify({ version }))
+    return
+  }
+  if (req.url === '/mcp' && req.method === 'POST') {
+    let body = ''
+    req.on('data', chunk => { body += chunk })
+    req.on('end', () => {
+      const call = JSON.parse(body)
+      fs.appendFileSync(logPath, JSON.stringify({ event: 'mcp-start' }) + '\\n')
+      setTimeout(() => {
+        const tool = call && call.params && call.params.name
+        const args = call && call.params && call.params.arguments
+        if (tool === 'update_node' && args && typeof args.id === 'string') {
+          const children = Array.isArray(document.children) ? document.children : []
+          document = {
+            ...document,
+            children: [
+              ...children.filter(child => !child || child.id !== args.id),
+              { id: args.id, ...(typeof args.name === 'string' ? { name: args.name } : {}) },
+            ],
+          }
+        }
+        if (tool === 'batch_design') {
+          document = {
+            ...document,
+            children: [
+              ...(Array.isArray(document.children) ? document.children : []),
+              { id: 'node-final-batch', name: 'Mutation from batch_design' },
+            ],
+          }
+        }
+        version += 1
+        res.statusCode = 200
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'fake-mcp',
+          result: {
+            content: [{ type: 'text', text: JSON.stringify({ applied: true }) }],
+          },
+        }))
+      }, mcpDelay)
+    })
+    return
+  }
   res.statusCode = 200
   res.setHeader('content-type', 'application/javascript')
   res.end('/* fake OpenPencil web host */')
@@ -47,11 +131,54 @@ async function waitForHosts(path, count) {
   const deadline = Date.now() + 3_000
   while (Date.now() < deadline) {
     const text = await readFile(path, 'utf8').catch(() => '')
-    const entries = text.trim() === '' ? [] : text.trim().split('\n').map(line => JSON.parse(line))
+    const entries = text.trim() === ''
+      ? []
+      : text.trim().split('\n').map(line => JSON.parse(line)).filter(entry => Number.isInteger(entry.pid))
     if (entries.length >= count) return entries
     await new Promise(resolve => setTimeout(resolve, 10))
   }
   throw new Error(`fake editor host did not record ${count} start(s)`)
+}
+
+async function waitForLogEvent(path, event) {
+  const deadline = Date.now() + 3_000
+  while (Date.now() < deadline) {
+    const text = await readFile(path, 'utf8').catch(() => '')
+    const entries = text.trim() === '' ? [] : text.trim().split('\n').map(line => JSON.parse(line))
+    if (entries.some(entry => entry.event === event)) return
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  throw new Error(`fake editor host did not record ${event}`)
+}
+
+class MockResponse extends EventEmitter {
+  statusCode = 0
+  writableFinished = false
+  destroyed = false
+  headers = new Map()
+  body = ''
+
+  setHeader(name, value) {
+    this.headers.set(name.toLowerCase(), value)
+  }
+
+  end(body = '') {
+    this.body = String(body)
+    this.writableFinished = true
+    this.emit('finish')
+  }
+}
+
+function pendingRequest(path, method, origin) {
+  const request = new PassThrough()
+  request.url = path
+  request.method = method
+  request.headers = {
+    origin,
+    host: new URL(origin).host,
+    'content-type': 'application/json',
+  }
+  return request
 }
 
 function isAlive(pid) {
@@ -86,14 +213,23 @@ async function createHarness(delayMs) {
   await chmod(binary, 0o755)
 
   const previousBinary = process.env.DSH_OPENPENCIL_EDITOR_BINARY
+  const previousDshHome = process.env.DSH_HOME
   const previousDelay = process.env.FAKE_EDITOR_HANDSHAKE_DELAY_MS
+  const previousMcpDelay = process.env.FAKE_EDITOR_MCP_DELAY_MS
+  const previousDocumentDelay = process.env.FAKE_EDITOR_DOCUMENT_DELAY_MS
   const previousLog = process.env.FAKE_EDITOR_LOG
   process.env.DSH_OPENPENCIL_EDITOR_BINARY = binary
+  process.env.DSH_HOME = join(root, 'dsh-home')
   process.env.FAKE_EDITOR_HANDSHAKE_DELAY_MS = String(delayMs)
+  process.env.FAKE_EDITOR_MCP_DELAY_MS = '0'
+  process.env.FAKE_EDITOR_DOCUMENT_DELAY_MS = '0'
   process.env.FAKE_EDITOR_LOG = logPath
 
+  const masterKey = randomBytes(32)
   const { EditorHostController } = await import(`../lib/editor-host.js?lifecycle=${Date.now()}-${Math.random()}`)
-  const controller = new EditorHostController(randomBytes(32))
+  const { EditorRecoveryStore } = await import(`../lib/editor-recovery.js?lifecycle=${Date.now()}-${Math.random()}`)
+  const controller = new EditorHostController(masterKey)
+  const recoveryStore = new EditorRecoveryStore(masterKey)
   const detach = controller.attachRoute()
   const grant = controller.grantFor(sourcePath, sha256(document))
   assert.ok(grant)
@@ -115,6 +251,10 @@ async function createHarness(delayMs) {
     controller,
     detach,
     grant,
+    root,
+    sourcePath,
+    sourceDocument: document,
+    recoveryStore,
     logPath,
     request,
     origin,
@@ -124,8 +264,14 @@ async function createHarness(delayMs) {
       await closeServer(server)
       if (previousBinary === undefined) delete process.env.DSH_OPENPENCIL_EDITOR_BINARY
       else process.env.DSH_OPENPENCIL_EDITOR_BINARY = previousBinary
+      if (previousDshHome === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = previousDshHome
       if (previousDelay === undefined) delete process.env.FAKE_EDITOR_HANDSHAKE_DELAY_MS
       else process.env.FAKE_EDITOR_HANDSHAKE_DELAY_MS = previousDelay
+      if (previousMcpDelay === undefined) delete process.env.FAKE_EDITOR_MCP_DELAY_MS
+      else process.env.FAKE_EDITOR_MCP_DELAY_MS = previousMcpDelay
+      if (previousDocumentDelay === undefined) delete process.env.FAKE_EDITOR_DOCUMENT_DELAY_MS
+      else process.env.FAKE_EDITOR_DOCUMENT_DELAY_MS = previousDocumentDelay
       if (previousLog === undefined) delete process.env.FAKE_EDITOR_LOG
       else process.env.FAKE_EDITOR_LOG = previousLog
       await rm(root, { recursive: true, force: true })
@@ -175,6 +321,384 @@ test('concurrent launch requests serialize and stale cleanup cannot close the su
     await harness.cleanup()
   }
 })
+
+test('user close returns 409 without stopping an editor while a save is in flight', async () => {
+  const harness = await createHarness(0)
+  try {
+    const launchResponse = await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-saving' }),
+    })
+    const launch = await launchResponse.json()
+    const [host] = await waitForHosts(harness.logPath, 1)
+
+    const saveRequest = pendingRequest(launch.saveUrl, 'POST', harness.origin)
+    const saveResponse = new MockResponse()
+    const savePending = harness.controller.handle(saveRequest, saveResponse)
+
+    const close = await harness.request(launch.closeUrl, { method: 'DELETE' })
+    assert.equal(close.status, 409)
+    assert.match((await close.json()).error, /saving or applying/)
+    assert.equal(isAlive(host.pid), true, 'rejected close must keep the managed editor alive')
+    assert.equal((await fetch(launch.iframeUrl)).status, 200)
+
+    saveRequest.end(JSON.stringify({
+      sessionId: launch.sessionId,
+      docJson: '{"version":1,"children":[]}',
+      generation: 0,
+      revision: 1,
+    }))
+    await savePending
+    assert.equal(saveResponse.statusCode, 200)
+
+    const retry = await harness.request(launch.closeUrl, { method: 'DELETE' })
+    assert.equal(retry.status, 200)
+    await waitForExit(host.pid)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('dirty daemon recovery survives a session close and restores without overwriting the source', async () => {
+  const harness = await createHarness(0)
+  try {
+    const first = await (await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-recovery-one' }),
+    })).json()
+    const originalSource = await readFile(join(harness.root, 'design.op'), 'utf8')
+    const draft = { version: 1, children: [{ id: 'unsaved-recovery-node' }] }
+    const daemonOrigin = new URL(first.iframeUrl).origin
+    const changed = await fetch(`${daemonOrigin}/api/mcp/document`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ document: draft, sourceClientId: 'test', baseVersion: 1 }),
+    })
+    assert.equal(changed.status, 200)
+
+    const captured = await harness.request(first.recoveryUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: first.sessionId }),
+    })
+    assert.equal(captured.status, 200, await captured.clone().text())
+    const captureBody = await captured.json()
+    assert.equal(captureBody.ok, true)
+    assert.match(captureBody.recovery.id, /^[A-Za-z0-9_-]{43}$/)
+    assert.equal(JSON.stringify(captureBody).includes(harness.root), false, 'public recovery metadata must not expose an absolute path')
+
+    assert.equal((await harness.request(first.closeUrl, { method: 'DELETE' })).status, 200)
+    const second = await (await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-recovery-two' }),
+    })).json()
+    assert.equal(second.recovery.id, captureBody.recovery.id)
+
+    const restored = await harness.request(`${second.recoveryUrl}/${second.recovery.id}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: second.sessionId }),
+    })
+    assert.equal(restored.status, 200)
+    assert.deepEqual(JSON.parse((await restored.json()).docJson), draft)
+    assert.equal(await readFile(join(harness.root, 'design.op'), 'utf8'), originalSource, 'restore must not overwrite the .op source')
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('recovery keeps the launch baseline when disk and daemon both diverge', async () => {
+  const harness = await createHarness(0)
+  try {
+    const first = await (await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-baseline-a' }),
+    })).json()
+    const sourcePath = join(harness.root, 'design.op')
+    const externalSource = '{"version":1,"children":[{"id":"external-b"}]}'
+    const daemonDraft = { version: 1, children: [{ id: 'daemon-c' }] }
+    await writeFile(sourcePath, externalSource)
+    const pushed = await fetch(`${new URL(first.iframeUrl).origin}/api/mcp/document`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ document: daemonDraft, sourceClientId: 'test', baseVersion: 1 }),
+    })
+    assert.equal(pushed.status, 200)
+
+    const capture = await (await harness.request(first.recoveryUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: first.sessionId }),
+    })).json()
+    assert.equal(capture.ok, true)
+    assert.equal((await harness.request(first.closeUrl, { method: 'DELETE' })).status, 200)
+
+    const grantForExternalSource = harness.controller.grantFor(sourcePath, sha256(externalSource))
+    assert.ok(grantForExternalSource)
+    const reopened = await (await harness.request(grantForExternalSource.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-source-b' }),
+    })).json()
+    assert.equal(reopened.recovery.id, capture.recovery.id)
+    assert.equal(
+      reopened.recovery.sourceChangedSinceCapture,
+      true,
+      'recovery C was based on launch baseline A, even though disk B was used for the clean comparison',
+    )
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('idle pruning captures a dirty daemon before stopping it', async () => {
+  const harness = await createHarness(0)
+  const realDateNow = Date.now
+  try {
+    const launched = await (await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-idle-dirty' }),
+    })).json()
+    const [host] = await waitForHosts(harness.logPath, 1)
+    const daemonDraft = { version: 1, children: [{ id: 'idle-unsaved' }] }
+    const pushed = await fetch(`${new URL(launched.iframeUrl).origin}/api/mcp/document`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ document: daemonDraft, sourceClientId: 'test', baseVersion: 1 }),
+    })
+    assert.equal(pushed.status, 200)
+
+    const launchedAt = realDateNow()
+    Date.now = () => launchedAt + 5 * 60 * 60 * 1000
+    const pruneProbe = await harness.request('/_dsh/dsh-openpencil/editor/not-found')
+    assert.equal(pruneProbe.status, 404)
+    Date.now = realDateNow
+    await waitForExit(host.pid)
+
+    const reopened = await (await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-after-idle' }),
+    })).json()
+    assert.ok(reopened.recovery, 'idle cleanup must persist recovery metadata before stopping the daemon')
+  } finally {
+    Date.now = realDateNow
+    await harness.cleanup()
+  }
+})
+
+test('user close returns 409 without stopping an editor while an MCP mutation is in flight', async () => {
+  const harness = await createHarness(0)
+  try {
+    process.env.FAKE_EDITOR_MCP_DELAY_MS = '150'
+    const launchResponse = await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-mutating' }),
+    })
+    const launch = await launchResponse.json()
+    const [host] = await waitForHosts(harness.logPath, 1)
+
+    const mutation = harness.controller.callActiveMcp('update_node', { id: 'node-1', name: 'Updated' }, {
+      ownerSessionId: 'owner-mutating',
+    })
+    await waitForLogEvent(harness.logPath, 'mcp-start')
+
+    const close = await harness.request(launch.closeUrl, { method: 'DELETE' })
+    assert.equal(close.status, 409)
+    assert.match((await close.json()).error, /saving or applying/)
+    assert.equal(isAlive(host.pid), true, 'rejected close must keep the managed editor alive')
+    assert.equal((await fetch(launch.iframeUrl)).status, 200)
+
+    await mutation
+    const retry = await harness.request(launch.closeUrl, { method: 'DELETE' })
+    assert.equal(retry.status, 200)
+    await waitForExit(host.pid)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('controller disposal waits for an in-flight save before stopping the editor', async () => {
+  const harness = await createHarness(0)
+  try {
+    const launchResponse = await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-force-dispose' }),
+    })
+    const launch = await launchResponse.json()
+    const [host] = await waitForHosts(harness.logPath, 1)
+
+    const saveRequest = pendingRequest(launch.saveUrl, 'POST', harness.origin)
+    const saveResponse = new MockResponse()
+    const savePending = harness.controller.handle(saveRequest, saveResponse)
+
+    const firstDispose = harness.controller.dispose()
+    const repeatedDispose = harness.controller.dispose()
+    assert.equal(repeatedDispose, firstDispose, 'concurrent disposers must join one teardown promise')
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal(isAlive(host.pid), true, 'disposal must not kill a child before its accepted save settles')
+
+    saveRequest.end(JSON.stringify({
+      sessionId: launch.sessionId,
+      docJson: '{"version":1,"children":[]}',
+      generation: 0,
+      revision: 1,
+    }))
+    await savePending
+    await firstDispose
+    await waitForExit(host.pid)
+    assert.equal(saveResponse.statusCode, 200)
+    await assert.rejects(
+      harness.controller.getActiveSelection(),
+      /No active OpenPencil editor/,
+    )
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('controller disposal captures the final delayed MCP mutation before stopping the editor', async () => {
+  const harness = await createHarness(0)
+  try {
+    process.env.FAKE_EDITOR_MCP_DELAY_MS = '150'
+    await (await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-dispose-mutation' }),
+    })).json()
+    const [host] = await waitForHosts(harness.logPath, 1)
+
+    const mutation = harness.controller.callActiveMcp('update_node', {
+      id: 'node-final-dispose',
+      name: 'Mutation before dispose',
+    }, { ownerSessionId: 'owner-dispose-mutation' })
+    await waitForLogEvent(harness.logPath, 'mcp-start')
+
+    const disposing = harness.controller.dispose()
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal(isAlive(host.pid), true, 'disposal must wait for the delayed MCP mutation')
+
+    await mutation
+    await disposing
+    await waitForExit(host.pid)
+    const recovery = await harness.recoveryStore.find(
+      harness.sourcePath,
+      sha256(harness.sourceDocument),
+      harness.sourceDocument,
+    )
+    assert.ok(recovery, 'disposal must persist the dirty post-mutation daemon document')
+    const recovered = await harness.recoveryStore.read(harness.sourcePath, recovery.id)
+    assert.ok(recovered)
+    assert.deepEqual(JSON.parse(recovered.documentJson).children, [
+      { id: 'node-final-dispose', name: 'Mutation before dispose' },
+    ])
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('successor launch captures the final delayed MCP mutation before retiring the old editor', async () => {
+  const harness = await createHarness(0)
+  try {
+    process.env.FAKE_EDITOR_MCP_DELAY_MS = '150'
+    await (await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-first-mutation' }),
+    })).json()
+    const [firstHost] = await waitForHosts(harness.logPath, 1)
+
+    const mutation = harness.controller.callActiveMcp('update_node', {
+      id: 'node-final-successor',
+      name: 'Mutation before successor',
+    }, { ownerSessionId: 'owner-first-mutation' })
+    await waitForLogEvent(harness.logPath, 'mcp-start')
+
+    const successorPending = harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'owner-successor' }),
+    })
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal(isAlive(firstHost.pid), true, 'successor launch must wait before retiring the mutating editor')
+
+    await mutation
+    const successor = await (await successorPending).json()
+    await waitForExit(firstHost.pid)
+    assert.ok(successor.recovery, 'successor launch must surface the retired editor recovery')
+    const recovered = await harness.recoveryStore.read(harness.sourcePath, successor.recovery.id)
+    assert.ok(recovered)
+    assert.deepEqual(JSON.parse(recovered.documentJson).children, [
+      { id: 'node-final-successor', name: 'Mutation before successor' },
+    ])
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+for (const scenario of [
+  {
+    tool: 'update_node',
+    args: { id: 'node-final-capture', name: 'Mutation after capture started' },
+    expected: { id: 'node-final-capture', name: 'Mutation after capture started' },
+  },
+  {
+    tool: 'batch_design',
+    args: { operations: 'U("root", {"name":"Mutation from batch_design"})' },
+    expected: { id: 'node-final-batch', name: 'Mutation from batch_design' },
+  },
+]) {
+  test(`recovery capture serializes ${scenario.tool} accepted after capture starts through final close`, async () => {
+    const harness = await createHarness(0)
+    try {
+      process.env.FAKE_EDITOR_DOCUMENT_DELAY_MS = '120'
+      process.env.FAKE_EDITOR_MCP_DELAY_MS = '80'
+      const launch = await (await harness.request(harness.grant.launchUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId: `owner-capture-${scenario.tool}` }),
+      })).json()
+
+      const capturePending = harness.request(launch.recoveryUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId: launch.sessionId }),
+      })
+      await waitForLogEvent(harness.logPath, 'document-read-start')
+
+      const mutation = harness.controller.callActiveMcp(scenario.tool, scenario.args, {
+        ownerSessionId: `owner-capture-${scenario.tool}`,
+      })
+      const initialCapture = await capturePending
+      assert.equal(initialCapture.status, 200)
+      assert.equal((await initialCapture.json()).recovery, null, 'the first capture intentionally observed the clean pre-mutation document')
+      await waitForLogEvent(harness.logPath, 'mcp-start')
+      const closePending = harness.request(launch.closeUrl, { method: 'DELETE' })
+      await mutation
+
+      const close = await closePending
+      assert.equal(close.status, 200, await close.clone().text())
+      const recovery = await harness.recoveryStore.find(
+        harness.sourcePath,
+        sha256(harness.sourceDocument),
+        harness.sourceDocument,
+      )
+      assert.ok(recovery, 'atomic close must refresh recovery after the queued Agent mutation')
+      const recovered = await harness.recoveryStore.read(harness.sourcePath, recovery.id)
+      assert.ok(recovered)
+      assert.deepEqual(JSON.parse(recovered.documentJson).children, [scenario.expected])
+    } finally {
+      await harness.cleanup()
+    }
+  })
+}
 
 test('route disposal terminates a pending launch and prevents late registration', async () => {
   const harness = await createHarness(5_000)

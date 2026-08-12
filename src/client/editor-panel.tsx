@@ -1,9 +1,10 @@
-/** Full OpenPencil editor hosted in DSH's Tool details side panel. */
+/** Full OpenPencil editor shared by native Tool details and plugin-owned surfaces. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PresentationGrant } from './index.js'
 import {
   claimEditor,
+  confirmEditorClose,
   editorControlUrl,
   editorIframeUrlWithTheme,
   editorIframeUrlWithLocale,
@@ -21,6 +22,15 @@ import {
   publishOpenPencilSelection,
 } from './selection-store.js'
 import { startEditorSelectionPolling } from './selection-polling.js'
+import {
+  captureManagedEditorRecovery,
+  editorRecoveryCopy,
+  editorRecoverySummaryOf,
+  restoreManagedEditorRecovery,
+  type EditorRecoverySummary,
+} from './editor-recovery.js'
+
+export type { EditorRecoverySummary } from './editor-recovery.js'
 
 export interface LaunchResponse {
   sessionId: string
@@ -28,6 +38,8 @@ export interface LaunchResponse {
   token: string
   saveUrl: string
   selectionUrl?: string
+  recoveryUrl?: string
+  recovery?: EditorRecoverySummary
   closeUrl: string
   docJson?: string
   /** Client-only marker: the persisted launch capability was renewed. */
@@ -56,7 +68,11 @@ function launchResponseOf(value: unknown): LaunchResponse {
     ...(typeof value.selectionUrl === 'string' && value.selectionUrl.length > 0
       ? { selectionUrl: editorControlUrl(value.selectionUrl) }
       : {}),
+    ...(typeof value.recoveryUrl === 'string' && value.recoveryUrl.length > 0
+      ? { recoveryUrl: editorControlUrl(value.recoveryUrl) }
+      : {}),
     closeUrl: editorControlUrl(value.closeUrl as string),
+    ...(editorRecoverySummaryOf(value.recovery) === undefined ? {} : { recovery: editorRecoverySummaryOf(value.recovery) }),
     ...(typeof value.docJson === 'string' ? { docJson: value.docJson } : {}),
   }
 }
@@ -89,6 +105,8 @@ export interface EditorPanelCopy {
   pngFallback: string
   editorTitle: (title: string) => string
   editorTimeout: string
+  editorBusy: string
+  discard: string
   saveConflict: (serverVersion: number) => string
   syncConflict: (serverVersion: number) => string
 }
@@ -105,6 +123,8 @@ const EDITOR_PANEL_COPY: Record<EditorLocale, EditorPanelCopy> = {
     pngFallback: '打开 PNG 预览',
     editorTitle: title => `OpenPencil 编辑器：${title}`,
     editorTimeout: 'OpenPencil 编辑器未能及时就绪',
+    editorBusy: '另一个 OpenPencil 编辑器仍有未保存的更改。',
+    discard: 'OpenPencil 中有未保存的更改，确定关闭并放弃吗？',
     saveConflict: serverVersion => `OpenPencil 保存冲突（服务器版本 ${serverVersion}）`,
     syncConflict: serverVersion => `源文件已在编辑器外部更改（服务器版本 ${serverVersion}），已停止保存。`,
   },
@@ -119,6 +139,8 @@ const EDITOR_PANEL_COPY: Record<EditorLocale, EditorPanelCopy> = {
     pngFallback: 'Open PNG fallback',
     editorTitle: title => `OpenPencil editor: ${title}`,
     editorTimeout: 'OpenPencil editor did not become ready',
+    editorBusy: 'Another OpenPencil editor still has unsaved changes.',
+    discard: 'OpenPencil has unsaved changes. Close and discard them?',
     saveConflict: serverVersion => `OpenPencil save conflict (server v${serverVersion})`,
     syncConflict: serverVersion => `The source changed outside this editor (server v${serverVersion}). Save was stopped.`,
   },
@@ -215,7 +237,7 @@ export async function prepareManagedEditor(
   } catch (error) {
     // The daemon already exists once launchManagedEditor returns. A cancelled
     // fallback document fetch or contract error must not strand that process.
-    await closeManagedEditorLaunch(launch, { fetcher, keepalive: true })
+    await closeManagedEditorLaunch(launch, { fetcher, keepalive: true }).catch(() => {})
     throw error
   }
 }
@@ -226,13 +248,14 @@ export async function closeManagedEditorLaunch(
   options: EditorCloseOptions = {},
 ): Promise<void> {
   const fetcher = options.fetcher ?? fetch
-  await fetcher(launch.closeUrl, {
+  const response = await fetcher(launch.closeUrl, {
     method: 'DELETE',
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ sessionId: launch.sessionId, dirty: options.dirty ?? false }),
     ...(options.keepalive === undefined ? {} : { keepalive: options.keepalive }),
-  }).catch(() => {})
+  })
+  if (!response.ok) throw new Error(`OpenPencil editor close failed (${response.status})`)
 }
 
 /**
@@ -268,7 +291,7 @@ const panelStyles: Record<string, React.CSSProperties> = {
   button: {
     border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 6,
     color: 'var(--dsw-alias-label-primary)', background: 'var(--dsw-alias-bg-layer-1)',
-    padding: '4px 8px', cursor: 'pointer', font: 'inherit', fontSize: 12,
+    padding: '4px 8px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 'inherit', lineHeight: 1,
   },
   stage: { position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden', background: 'var(--dsw-alias-bg-base)' },
   iframe: { display: 'block', width: '100%', height: '100%', border: 0, background: 'var(--dsw-alias-bg-base)' },
@@ -280,14 +303,71 @@ const panelStyles: Record<string, React.CSSProperties> = {
   error: { color: 'var(--dsw-alias-state-error-primary)', maxWidth: 420, overflowWrap: 'anywhere' },
 }
 
-type Phase = 'launching' | 'loading' | 'ready' | 'saving' | 'error'
+export type EditorLifecyclePhase = 'launching' | 'loading' | 'ready' | 'saving' | 'error'
+
+export interface EditorLifecycleState {
+  dirty: boolean
+  phase: EditorLifecyclePhase
+}
+
+export interface EditorLifecycleController {
+  /** Close through the guarded server capability while the React owner remains mounted. */
+  requestClose: () => Promise<boolean>
+  /** Ask the host to persist an opaque, source-scoped daemon recovery snapshot. */
+  captureRecovery: () => Promise<boolean>
+  /** Join a save the user already started; never starts a new source write. */
+  awaitExistingSave: () => Promise<boolean>
+  /** HMR-only escape hatch: leave the daemon for the server lifecycle when capture failed. */
+  retainServerSessionOnUnmount: () => void
+}
+
+export const INITIAL_EDITOR_LIFECYCLE_STATE: EditorLifecycleState = {
+  dirty: false,
+  phase: 'launching',
+}
+
+export type EditorUnmountDisposition = 'closed' | 'retained'
+
+export interface EditorUnmountState {
+  /** Explicit retention armed after a failed workbench recovery capture. */
+  retainServerSession: boolean
+  /** Latest client dirty signal. */
+  dirty: boolean
+  /** False after a successful explicit close cleared the exact launch. */
+  hasLiveLaunch: boolean
+}
+
+/**
+ * Apply the unmount policy without letting React cleanup accidentally issue
+ * DELETE. Dirty live launches are retained by default even when their native
+ * Tool-details owner has no lifecycle controller.
+ */
+export function applyManagedEditorUnmountPolicy(
+  state: EditorUnmountState,
+  closeDaemon: () => void,
+): EditorUnmountDisposition {
+  if (state.retainServerSession || (state.dirty && state.hasLiveLaunch)) return 'retained'
+  closeDaemon()
+  return 'closed'
+}
 
 /** Editable panel. The daemon is created lazily only while this component is mounted. */
-export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId }: {
+export function ManagedOpenPencilEditor({
+  grant,
+  colorScheme,
+  locale,
+  sessionId,
+  onTakeoverRequest,
+  onLifecycleState,
+  onLifecycleController,
+}: {
   grant: PresentationGrant
   colorScheme: EditorColorScheme
   locale: EditorLocale
   sessionId: string
+  onTakeoverRequest?: (state: EditorLifecycleState) => boolean
+  onLifecycleState?: (state: EditorLifecycleState) => void
+  onLifecycleController?: (controller: EditorLifecycleController | undefined) => void
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const launchRef = useRef<LaunchResponse>()
@@ -298,16 +378,41 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
   colorSchemeRef.current = colorScheme
   const localeRef = useRef(locale)
   localeRef.current = locale
+  const takeoverRequestRef = useRef(onTakeoverRequest)
+  takeoverRequestRef.current = onTakeoverRequest
+  const lifecycleStateRef = useRef(onLifecycleState)
+  lifecycleStateRef.current = onLifecycleState
+  const lifecycleControllerRef = useRef(onLifecycleController)
+  lifecycleControllerRef.current = onLifecycleController
   const initTimerRef = useRef<ReturnType<typeof setInterval>>()
   const selectionPollStopRef = useRef<() => void>()
   const requestCounterRef = useRef(0)
   const saveWaitersRef = useRef(new Map<string, { resolve: (message: Extract<EditorInboundMessage, { type: 'op-bridge/snapshot-result' }>) => void; reject: (error: Error) => void }>())
-  const [phase, setPhase] = useState<Phase>('launching')
+  const [phase, setPhase] = useState<EditorLifecyclePhase>('launching')
+  const phaseRef = useRef<EditorLifecyclePhase>('launching')
   const [failure, setFailure] = useState('')
   const [dirty, setDirty] = useState(false)
   const dirtyRef = useRef(false)
+  const saveInFlightRef = useRef<Promise<boolean>>()
+  const closeDaemonRef = useRef<(dirty?: boolean) => Promise<void>>()
+  const retainServerSessionOnUnmountRef = useRef(false)
+  const restoredRecoveryRef = useRef(false)
   const documentGrant = grant.document!
   const editorGrant = grant.editor!
+
+  const publishLifecycle = useCallback(() => {
+    lifecycleStateRef.current?.({ dirty: dirtyRef.current, phase: phaseRef.current })
+  }, [])
+  const updatePhase = useCallback((next: EditorLifecyclePhase) => {
+    phaseRef.current = next
+    setPhase(next)
+    publishLifecycle()
+  }, [publishLifecycle])
+  const updateDirty = useCallback((next: boolean) => {
+    dirtyRef.current = next
+    setDirty(next)
+    publishLifecycle()
+  }, [publishLifecycle])
 
   const post = useCallback((message: Parameters<typeof encodeEditorOutbound>[0]) => {
     const frame = iframeRef.current?.contentWindow
@@ -315,40 +420,97 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
     frame.postMessage(encodeEditorOutbound(message), originRef.current)
   }, [])
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (): Promise<boolean> => {
+    if (saveInFlightRef.current !== undefined) return saveInFlightRef.current
     const launch = launchRef.current
-    if (launch === undefined || phase === 'launching' || phase === 'loading' || phase === 'saving') return
-    setPhase('saving')
-    setFailure('')
-    const requestId = `dsh-save-${++requestCounterRef.current}`
+    if (launch === undefined || phaseRef.current === 'launching' || phaseRef.current === 'loading') return false
+    if (!dirtyRef.current) return true
+    const operation = (async (): Promise<boolean> => {
+      updatePhase('saving')
+      setFailure('')
+      const requestId = `dsh-save-${++requestCounterRef.current}`
+      let snapshotTimer: ReturnType<typeof setTimeout> | undefined
+      try {
+        const snapshot = await Promise.race([
+          new Promise<Extract<EditorInboundMessage, { type: 'op-bridge/snapshot-result' }>>((resolve, reject) => {
+            saveWaitersRef.current.set(requestId, { resolve, reject })
+            post({ type: 'op-bridge/snapshot', purpose: 'save', requestId })
+          }),
+          new Promise<never>((_, reject) => {
+            snapshotTimer = setTimeout(() => { reject(new Error('OpenPencil snapshot timed out')) }, 8_000)
+          }),
+        ])
+        const response = await fetch(launch.saveUrl, {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: launch.sessionId,
+            docJson: snapshot.docJson,
+            generation: snapshot.generation,
+            revision: snapshot.revision,
+          }),
+        })
+        const saveResponse = await responseJson(response, 'OpenPencil save')
+        rememberEditorSuccessor(editorGrant.launchUrl, saveResponse)
+        post({ type: 'op-bridge/save-committed', generation: snapshot.generation, revision: snapshot.revision })
+        restoredRecoveryRef.current = false
+        updateDirty(false)
+        updatePhase('ready')
+        return true
+      } catch (error) {
+        setFailure(error instanceof Error ? error.message : String(error))
+        updatePhase('error')
+        return false
+      } finally {
+        if (snapshotTimer !== undefined) clearTimeout(snapshotTimer)
+        saveWaitersRef.current.delete(requestId)
+      }
+    })()
+    saveInFlightRef.current = operation
     try {
-      const snapshot = await new Promise<Extract<EditorInboundMessage, { type: 'op-bridge/snapshot-result' }>>((resolve, reject) => {
-        saveWaitersRef.current.set(requestId, { resolve, reject })
-        post({ type: 'op-bridge/snapshot', purpose: 'save', requestId })
-      })
-      const response = await fetch(launch.saveUrl, {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: launch.sessionId,
-          docJson: snapshot.docJson,
-          generation: snapshot.generation,
-          revision: snapshot.revision,
-        }),
-      })
-      const saveResponse = await responseJson(response, 'OpenPencil save')
-      rememberEditorSuccessor(editorGrant.launchUrl, saveResponse)
-      post({ type: 'op-bridge/save-committed', generation: snapshot.generation, revision: snapshot.revision })
-      setDirty(false)
-      dirtyRef.current = false
-      setPhase('ready')
-    } catch (error) {
-      setFailure(error instanceof Error ? error.message : String(error))
-      setPhase('error')
+      return await operation
     } finally {
-      saveWaitersRef.current.delete(requestId)
+      if (saveInFlightRef.current === operation) saveInFlightRef.current = undefined
     }
-  }, [editorGrant.launchUrl, phase, post])
+  }, [editorGrant.launchUrl, post, updateDirty, updatePhase])
+
+  useEffect(() => {
+    publishLifecycle()
+    const controller: EditorLifecycleController = {
+      requestClose: async () => {
+        if (phaseRef.current === 'saving') return false
+        const closeDaemon = closeDaemonRef.current
+        if (closeDaemon === undefined) return false
+        try {
+          await closeDaemon(dirtyRef.current)
+          return true
+        } catch (error) {
+          setFailure(error instanceof Error ? error.message : String(error))
+          updatePhase('error')
+          return false
+        }
+      },
+      captureRecovery: async () => {
+        const launch = launchRef.current
+        if (launch?.recoveryUrl === undefined) return false
+        try {
+          await captureManagedEditorRecovery(launch)
+          return true
+        } catch {
+          return false
+        }
+      },
+      awaitExistingSave: async () => {
+        const pending = saveInFlightRef.current
+        return pending === undefined ? true : pending
+      },
+      retainServerSessionOnUnmount: () => {
+        retainServerSessionOnUnmountRef.current = true
+      },
+    }
+    lifecycleControllerRef.current?.(controller)
+    return () => { lifecycleControllerRef.current?.(undefined) }
+  }, [publishLifecycle, updatePhase])
 
   useEffect(() => {
     let cancelled = false
@@ -360,13 +522,28 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
       clearOpenPencilSelection(sessionId, documentGrant.path)
       const launch = launchRef.current
       if (launch === undefined) return
-      launchRef.current = undefined
       await closeManagedEditorLaunch(launch, { dirty: dirtyAtClose, keepalive: true })
+      if (launchRef.current === launch) launchRef.current = undefined
     }
+    closeDaemonRef.current = closeDaemon
     const releaseEditor = claimEditor(coordinatorToken, () => {
+      const takeoverRequest = takeoverRequestRef.current
+      const lifecycle = { dirty: dirtyRef.current, phase: phaseRef.current }
+      if (takeoverRequest !== undefined && !takeoverRequest(lifecycle)) return false
+      if (phaseRef.current === 'saving') return false
+      if (takeoverRequest === undefined && !confirmEditorClose(
+        dirtyRef.current,
+        () => window.confirm(editorPanelCopy(localeRef.current).discard),
+      )) return false
       abort.abort()
-      void closeDaemon(false)
+      void closeDaemon(dirtyRef.current)
+      return true
     })
+    if (releaseEditor === undefined) {
+      setFailure(editorPanelCopy(localeRef.current).editorBusy)
+      updatePhase('error')
+      return () => { abort.abort() }
+    }
     const boot = async (): Promise<void> => {
       try {
         const bootGrant = editorGrantForBoot(editorGrant)
@@ -376,11 +553,23 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
           sessionId,
         })
         if (prepared === undefined) return
-        const { launch, documentJson } = prepared
-        const origin = editorOrigin(launch.iframeUrl)
-        // No await occurs between acceptance and publication. Cleanup can now
-        // find this session in launchRef and cannot target a later launch.
+        const { launch } = prepared
+        // Publish immediately: recovery restore performs another await and a
+        // failed restore must remain reachable by cleanup instead of leaking
+        // the already-created daemon.
         launchRef.current = launch
+        let { documentJson } = prepared
+        if (launch.recovery !== undefined) {
+          const recoveryCopy = editorRecoveryCopy(localeRef.current)
+          const message = launch.recovery.sourceChangedSinceCapture
+            ? recoveryCopy.conflict(launch.recovery.sourceName)
+            : recoveryCopy.available(launch.recovery.sourceName)
+          if (window.confirm(message)) {
+            documentJson = await restoreManagedEditorRecovery(launch, launch.recovery)
+            restoredRecoveryRef.current = true
+          }
+        }
+        const origin = editorOrigin(launch.iframeUrl)
         // Capture first-navigation host presentation exactly once. Later host
         // theme/locale changes travel over the bridge and never reload the iframe.
         iframeSrcRef.current = editorIframeUrlWithLocale(
@@ -389,11 +578,15 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
         )
         docJsonRef.current = documentJson
         originRef.current = origin
-        setPhase('loading')
+        updatePhase('loading')
       } catch (error) {
+        // A recovery request may fail after launch has already created a
+        // daemon. Close that exact session now; waiting for component unmount
+        // would strand it behind an error surface.
+        await closeDaemon(dirtyRef.current).catch(() => {})
         if (cancelled || abort.signal.aborted) return
         setFailure(error instanceof Error ? error.message : String(error))
-        setPhase('error')
+        updatePhase('error')
       }
     }
     void boot()
@@ -405,9 +598,21 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
       const disposed = new Error('OpenPencil editor closed')
       for (const waiter of saveWaitersRef.current.values()) waiter.reject(disposed)
       saveWaitersRef.current.clear()
-      void closeDaemon()
+      if (closeDaemonRef.current === closeDaemon) closeDaemonRef.current = undefined
+      const disposition = applyManagedEditorUnmountPolicy({
+        retainServerSession: retainServerSessionOnUnmountRef.current,
+        dirty: dirtyRef.current,
+        hasLiveLaunch: launchRef.current !== undefined,
+      }, () => {
+        void closeDaemon().catch(() => {})
+      })
+      if (disposition === 'retained') {
+        selectionPollStopRef.current?.()
+        selectionPollStopRef.current = undefined
+        clearOpenPencilSelection(sessionId, documentGrant.path)
+      }
     }
-  }, [documentGrant.path, documentGrant.url, editorGrant.launchUrl, editorGrant.refreshUrl])
+  }, [documentGrant.path, documentGrant.url, editorGrant.launchUrl, editorGrant.refreshUrl, updatePhase])
 
   useEffect(() => {
     if (phase !== 'ready' && phase !== 'saving') return
@@ -442,11 +647,11 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
           post({ type: 'op-bridge/open-document', json: docJsonRef.current })
           break
         case 'op-bridge/opened':
-          setPhase('ready')
+          updatePhase('ready')
+          if (restoredRecoveryRef.current) updateDirty(true)
           break
         case 'op-bridge/dirty-changed':
-          setDirty(message.dirty)
-          dirtyRef.current = message.dirty
+          updateDirty(restoredRecoveryRef.current || message.dirty)
           break
         case 'op-bridge/snapshot-result':
           saveWaitersRef.current.get(message.requestId)?.resolve(message)
@@ -458,7 +663,7 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
           break
         case 'op-bridge/sync-conflict':
           setFailure(editorPanelCopy(localeRef.current).syncConflict(message.serverVersion))
-          setPhase('error')
+          updatePhase('error')
           break
         case 'op-shell/save':
           void save()
@@ -472,7 +677,7 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
     }
     window.addEventListener('message', listener)
     return () => { window.removeEventListener('message', listener) }
-  }, [post, save])
+  }, [post, save, updateDirty, updatePhase])
 
   useEffect(() => {
     post({ type: 'op-bridge/theme', colorScheme })
@@ -506,7 +711,7 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
         clearInterval(initTimerRef.current)
         initTimerRef.current = undefined
         setFailure(editorPanelCopy(localeRef.current).editorTimeout)
-        setPhase('error')
+        updatePhase('error')
       }
     }
     sendInit()
@@ -521,6 +726,7 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
       data-tool-details-fill="true"
       data-tool-details-dirty={dirty || undefined}
       data-openpencil-editor-panel="true"
+      aria-busy={phase === 'launching' || phase === 'loading' || phase === 'saving' || undefined}
     >
       <div style={panelStyles.toolbar}>
         <strong style={panelStyles.title} title={documentGrant.path}>{title}</strong>
@@ -535,6 +741,7 @@ export function ManagedOpenPencilEditor({ grant, colorScheme, locale, sessionId 
             src={iframeSrcRef.current}
             title={copy.editorTitle(title)}
             allow="clipboard-read; clipboard-write"
+            tabIndex={phase === 'ready' || phase === 'saving' ? 0 : -1}
             onLoad={startInitLoop}
           />
         ) : null}

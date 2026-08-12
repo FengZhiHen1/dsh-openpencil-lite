@@ -14,6 +14,15 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
   const injectedServices = []
   const registeredTools = []
   let disposeInjectedRoutes
+  let releaseEditorHostDispose
+  const editorHostDisposeBarrier = new Promise(resolve => { releaseEditorHostDispose = resolve })
+  const { EditorHostController } = await import('../lib/editor-host.js')
+  const originalEditorHostDispose = EditorHostController.prototype.dispose
+  let editorHostDisposeCalls = 0
+  EditorHostController.prototype.dispose = function disposeWithBarrier() {
+    editorHostDisposeCalls += 1
+    return editorHostDisposeBarrier
+  }
 
   const webServer = {
     register(route) {
@@ -68,10 +77,24 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
     )
     assert.equal(typeof disposeInjectedRoutes, 'function')
 
-    disposeInjectedRoutes()
+    const routeDisposal = disposeInjectedRoutes()
+    const pluginDisposal = disposePlugin()
+    let routeDisposed = false
+    let pluginDisposed = false
+    void routeDisposal.then(() => { routeDisposed = true })
+    void pluginDisposal.then(() => { pluginDisposed = true })
+    await new Promise(resolve => setImmediate(resolve))
+
+    assert.equal(editorHostDisposeCalls, 1, 'route and plugin cleanup must join one editor-host disposal')
+    assert.equal(routeDisposed, false, 'route cleanup must await the editor-host teardown')
+    assert.equal(pluginDisposed, false, 'plugin cleanup must await the editor-host teardown')
     assert.deepEqual(routeRemovals.sort(), routeRegistrations.map(route => route.path).sort())
-    disposePlugin()
+
+    releaseEditorHostDispose()
+    await Promise.all([routeDisposal, pluginDisposal])
   } finally {
+    releaseEditorHostDispose?.()
+    EditorHostController.prototype.dispose = originalEditorHostDispose
     if (previousDshHome === undefined) delete process.env.DSH_HOME
     else process.env.DSH_HOME = previousDshHome
     await rm(root, { recursive: true, force: true })

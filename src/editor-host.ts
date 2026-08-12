@@ -21,6 +21,12 @@ import {
   type OpenPencilMcpResult,
   type OpenPencilSelectionSnapshot,
 } from './mcp-client.js'
+import {
+  EditorRecoveryStore,
+  readManagedDaemonDocument,
+  restoreManagedDaemonDocument,
+  type EditorRecoveryReason,
+} from './editor-recovery.js'
 import { OPENPENCIL_RENDER_TOOL_NAME } from './tool-names.js'
 
 export const EDITOR_ROUTE_PREFIX = '/_dsh/dsh-openpencil/editor'
@@ -31,6 +37,7 @@ const SESSION_IDLE_MS = 4 * 60 * 60 * 1000
 const START_TIMEOUT_MS = 20_000
 const READY_TIMEOUT_MS = 15_000
 const STOP_TIMEOUT_MS = 3_000
+const OPERATION_RETIRE_TIMEOUT_MS = 25_000
 const MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
 const MAX_HANDSHAKE_BYTES = 16 * 1024
 const MAX_DIAGNOSTIC_BYTES = 64 * 1024
@@ -113,6 +120,8 @@ interface EditorSession {
   closed: boolean
   saving: boolean
   mutating: boolean
+  activeOperation?: Promise<void>
+  recoveryCaptureRequested: boolean
 }
 
 export type OpenPencilLiveTool = 'get_selection' | 'update_node' | 'batch_design'
@@ -423,12 +432,15 @@ export class EditorHostController {
   #routeRefs = 0
   #routeGeneration = 0
   readonly #editorKey: Buffer
+  readonly #recoveryStore: EditorRecoveryStore
   #sessions = new Map<string, EditorSession>()
   #pendingChildren = new Set<ChildProcessWithoutNullStreams>()
   #launchQueue: Promise<void> = Promise.resolve()
+  #disposePromise: Promise<void> | undefined
 
   constructor(masterKey: Buffer) {
     this.#editorKey = deriveEditorKey(masterKey)
+    this.#recoveryStore = new EditorRecoveryStore(masterKey)
   }
 
   get available(): boolean { return this.binary !== undefined }
@@ -474,6 +486,8 @@ export class EditorHostController {
       const legacyRefresh = url.pathname === `${EDITOR_ROUTE_PREFIX}/refresh`
       const save = new RegExp(`^${EDITOR_ROUTE_PREFIX}/session/([A-Za-z0-9_-]+)/save$`).exec(url.pathname)
       const selection = new RegExp(`^${EDITOR_ROUTE_PREFIX}/session/([A-Za-z0-9_-]+)/selection$`).exec(url.pathname)
+      const recovery = new RegExp(`^${EDITOR_ROUTE_PREFIX}/session/([A-Za-z0-9_-]+)/recovery$`).exec(url.pathname)
+      const recoveryItem = new RegExp(`^${EDITOR_ROUTE_PREFIX}/session/([A-Za-z0-9_-]+)/recovery/([A-Za-z0-9_-]+)$`).exec(url.pathname)
       const close = new RegExp(`^${EDITOR_ROUTE_PREFIX}/session/([A-Za-z0-9_-]+)$`).exec(url.pathname)
       if (launch !== null && req.method === 'POST') {
         const body = await readRequestBody(req)
@@ -516,6 +530,27 @@ export class EditorHostController {
         json(res, 200, { ok: true, selection: snapshot })
         return
       }
+      if (recovery !== null && req.method === 'POST') {
+        requestOrigin(req)
+        await readRequestBody(req).catch(() => Buffer.alloc(0))
+        const snapshot = await this.#captureRecoveryForSession(recovery[1]!, 'client-dispose')
+        json(res, 200, { ok: true, recovery: snapshot ?? null })
+        return
+      }
+      if (recoveryItem !== null && req.method === 'POST') {
+        requestOrigin(req)
+        await readRequestBody(req).catch(() => Buffer.alloc(0))
+        const restored = await this.#restoreRecoveryForSession(recoveryItem[1]!, recoveryItem[2]!)
+        json(res, 200, { ok: true, ...restored })
+        return
+      }
+      if (recoveryItem !== null && req.method === 'DELETE') {
+        requestOrigin(req)
+        await readRequestBody(req).catch(() => Buffer.alloc(0))
+        const discarded = await this.#discardRecoveryForSession(recoveryItem[1]!, recoveryItem[2]!)
+        json(res, 200, { ok: true, discarded })
+        return
+      }
       if (close !== null && req.method === 'DELETE') {
         requestOrigin(req)
         await readRequestBody(req).catch(() => Buffer.alloc(0))
@@ -530,18 +565,26 @@ export class EditorHostController {
     }
   }
 
-  async dispose(): Promise<void> {
-    // Invalidate work accepted by the route before it was detached. Pending
-    // launches check this generation around every asynchronous startup phase,
-    // and their child is stopped here so a handshake wait cannot leak.
-    this.#routeGeneration += 1
-    const sessions = [...this.#sessions.values()]
-    this.#sessions.clear()
-    const pending = [...this.#pendingChildren]
-    await Promise.all([
-      ...sessions.map(session => this.#disposeSession(session)),
-      ...pending.map(child => stopChild(child)),
-    ])
+  dispose(): Promise<void> {
+    if (this.#disposePromise !== undefined) return this.#disposePromise
+    this.#disposePromise = (async () => {
+      // Invalidate work accepted by the route before it was detached. Pending
+      // launches check this generation around every asynchronous startup phase,
+      // and their child is stopped here so a handshake wait cannot leak.
+      this.#routeGeneration += 1
+      const sessions = [...this.#sessions.values()]
+      this.#sessions.clear()
+      const pending = [...this.#pendingChildren]
+      await Promise.all([
+        ...sessions.map(session => this.#captureThenDispose(session, 'plugin-dispose')),
+        ...pending.map(child => stopChild(child)),
+      ])
+      // A launch can already own a retired session after removing it from the
+      // public session map. Wait for that serialized retirement too, so plugin
+      // disposal does not return while its previous editor is still alive.
+      await this.#launchQueue
+    })()
+    return this.#disposePromise
   }
 
   /** Current live editor selection, suitable for Agent context and UI chips. */
@@ -564,11 +607,7 @@ export class EditorHostController {
     if ('filePath' in args || 'sourceFilePath' in args || 'source_file_path' in args) {
       throw new Error('OpenPencil live tools cannot target a filesystem path through MCP arguments')
     }
-    if (mutating && (session.saving || session.mutating)) {
-      throw new Error('OpenPencil editor is already applying or saving another change')
-    }
-    if (mutating) session.mutating = true
-    try {
+    const execute = async (): Promise<OpenPencilMcpResult> => {
       let beforeVersion: number | undefined
       if (mutating) {
         const current = await readSourceDocument(session.sourcePath)
@@ -600,9 +639,16 @@ export class EditorHostController {
       }
       session.createdAt = Date.now()
       return result
-    } finally {
-      if (mutating) session.mutating = false
     }
+    if (!mutating) return execute()
+    return this.#enqueueSessionOperation(session, async () => {
+      session.mutating = true
+      try {
+        return await execute()
+      } finally {
+        session.mutating = false
+      }
+    })
   }
 
   async #serializeLaunch(task: () => Promise<void>): Promise<void> {
@@ -653,7 +699,7 @@ export class EditorHostController {
       // successor starts so stale transcript cards cannot retain authority.
       const old = [...this.#sessions.values()]
       this.#sessions.clear()
-      await Promise.all(old.map(session => this.#disposeSession(session)))
+      await Promise.all(old.map(session => this.#captureThenDispose(session, 'plugin-dispose')))
       assertConnected()
 
       const env: NodeJS.ProcessEnv = { ...process.env }
@@ -694,6 +740,7 @@ export class EditorHostController {
           closed: false,
           saving: false,
           mutating: false,
+          recoveryCaptureRequested: false,
         }
         this.#sessions.set(id, session)
         this.#pendingChildren.delete(child)
@@ -701,6 +748,17 @@ export class EditorHostController {
           if (this.#sessions.get(id) === session) this.#sessions.delete(id)
           session.closed = true
         })
+        let recovery
+        try {
+          recovery = await this.#recoveryStore.find(
+            session.sourcePath,
+            session.baselineSha256,
+            current.toString('utf8'),
+          )
+        } catch {
+          // Recovery is additive. A damaged/unwritable cache must never block
+          // the primary managed editor from opening.
+        }
         json(res, 200, {
           sessionId: id,
           iframeUrl: session.iframeUrl,
@@ -708,6 +766,8 @@ export class EditorHostController {
           saveUrl: `${EDITOR_ROUTE_PREFIX}/session/${id}/save`,
           selectionUrl: `${EDITOR_ROUTE_PREFIX}/session/${id}/selection`,
           closeUrl: `${EDITOR_ROUTE_PREFIX}/session/${id}`,
+          recoveryUrl: `${EDITOR_ROUTE_PREFIX}/session/${id}/recovery`,
+          ...(recovery === undefined ? {} : { recovery }),
           docJson: current.toString('utf8'),
         })
         if (!await waitForResponseFinish(res)) {
@@ -744,63 +804,138 @@ export class EditorHostController {
     if (!TOKEN_PATTERN.test(id)) throw new HttpError(404, 'editor session not found')
     const session = this.#sessions.get(id)
     if (session === undefined || session.closed) throw new HttpError(410, 'editor session has ended')
-    if (session.saving || session.mutating) throw new HttpError(409, 'another editor change or save is already in progress')
-    session.saving = true
-    try {
-      const bytes = await readRequestBody(req)
-      let value: unknown
+    await this.#enqueueSessionOperation(session, async () => {
+      session.saving = true
       try {
-        value = JSON.parse(bytes.toString('utf8'))
-      } catch {
-        throw new HttpError(400, 'editor save request is not valid JSON')
+        const bytes = await readRequestBody(req)
+        if (session.closed) throw new HttpError(410, 'editor session ended before save completed')
+        let value: unknown
+        try {
+          value = JSON.parse(bytes.toString('utf8'))
+        } catch {
+          throw new HttpError(400, 'editor save request is not valid JSON')
+        }
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new HttpError(400, 'editor save request is invalid')
+        const record = value as Record<string, unknown>
+        if (record.sessionId !== id || typeof record.docJson !== 'string') throw new HttpError(400, 'editor save request is incomplete')
+        if (
+          typeof record.generation !== 'number' || !Number.isSafeInteger(record.generation) || record.generation < 0
+          || typeof record.revision !== 'number' || !Number.isSafeInteger(record.revision) || record.revision < 0
+        ) throw new HttpError(400, 'editor save revision is invalid')
+        const current = await readSourceDocument(session.sourcePath)
+        if (sha256(current) !== session.baselineSha256) {
+          throw new HttpError(409, 'source changed outside this editor; save was stopped')
+        }
+        const nextHash = await atomicWriteDocument(session.sourcePath, record.docJson)
+        await this.#recoveryStore.discardFor(session.sourcePath).catch(() => false)
+        session.baselineSha256 = nextHash
+        const now = Date.now()
+        session.createdAt = now
+        const successor = session.refreshExpiresAt > now
+          ? this.#sealCapability({
+              v: 1,
+              scope: 'edit-source',
+              sourcePath: session.sourcePath,
+              sourceSha256: nextHash,
+              issuedAt: now,
+              launchExpiresAt: Math.min(now + CAPABILITY_TTL_MS, session.refreshExpiresAt),
+              refreshExpiresAt: session.refreshExpiresAt,
+            })
+          : undefined
+        json(res, 200, {
+          ok: true,
+          sha256: nextHash,
+          ...(successor === undefined ? {} : {
+            editor: {
+              enabled: true,
+              launchUrl: `${EDITOR_ROUTE_PREFIX}/${successor}/launch`,
+              refreshUrl: `${EDITOR_ROUTE_PREFIX}/${successor}/refresh`,
+            },
+          }),
+        })
+      } finally {
+        session.saving = false
       }
-      if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new HttpError(400, 'editor save request is invalid')
-      const record = value as Record<string, unknown>
-      if (record.sessionId !== id || typeof record.docJson !== 'string') throw new HttpError(400, 'editor save request is incomplete')
-      if (
-        typeof record.generation !== 'number' || !Number.isSafeInteger(record.generation) || record.generation < 0
-        || typeof record.revision !== 'number' || !Number.isSafeInteger(record.revision) || record.revision < 0
-      ) throw new HttpError(400, 'editor save revision is invalid')
-      const current = await readSourceDocument(session.sourcePath)
-      if (sha256(current) !== session.baselineSha256) {
-        throw new HttpError(409, 'source changed outside this editor; save was stopped')
-      }
-      const nextHash = await atomicWriteDocument(session.sourcePath, record.docJson)
-      session.baselineSha256 = nextHash
-      const now = Date.now()
-      session.createdAt = now
-      const successor = session.refreshExpiresAt > now
-        ? this.#sealCapability({
-            v: 1,
-            scope: 'edit-source',
-            sourcePath: session.sourcePath,
-            sourceSha256: nextHash,
-            issuedAt: now,
-            launchExpiresAt: Math.min(now + CAPABILITY_TTL_MS, session.refreshExpiresAt),
-            refreshExpiresAt: session.refreshExpiresAt,
-          })
-        : undefined
-      json(res, 200, {
-        ok: true,
-        sha256: nextHash,
-        ...(successor === undefined ? {} : {
-          editor: {
-            enabled: true,
-            launchUrl: `${EDITOR_ROUTE_PREFIX}/${successor}/launch`,
-            refreshUrl: `${EDITOR_ROUTE_PREFIX}/${successor}/refresh`,
-          },
-        }),
-      })
-    } finally {
-      session.saving = false
-    }
+    })
   }
 
   async #close(id: string): Promise<void> {
     const session = this.#sessions.get(id)
     if (session === undefined) return
+    // An ordinary user close remains guarded while a write is active. Once a
+    // recovery capture has been requested, however, close becomes the commit
+    // edge of that retirement transaction: remove authority for new work,
+    // await all work accepted after/before capture, recapture the final daemon
+    // document, then stop the child.
+    if (!session.recoveryCaptureRequested && session.activeOperation !== undefined) {
+      throw new HttpError(409, 'OpenPencil editor is still saving or applying a change')
+    }
     this.#sessions.delete(id)
-    await this.#disposeSession(session)
+    if (session.recoveryCaptureRequested) {
+      await this.#captureThenDispose(session, 'client-dispose')
+    } else {
+      await this.#disposeSession(session)
+    }
+  }
+
+  #sessionForControl(id: string): EditorSession {
+    if (!TOKEN_PATTERN.test(id)) throw new HttpError(404, 'editor session not found')
+    const session = this.#sessions.get(id)
+    if (session === undefined || session.closed) throw new HttpError(410, 'editor session has ended')
+    return session
+  }
+
+  async #captureRecoveryForSession(id: string, reason: EditorRecoveryReason) {
+    const session = this.#sessionForControl(id)
+    // Set this before queueing so a close arriving immediately after this
+    // request joins the atomic capture/write/close retirement path.
+    session.recoveryCaptureRequested = true
+    return this.#enqueueSessionOperation(session, () => this.#captureRecovery(session, reason))
+  }
+
+  async #captureRecovery(session: EditorSession, reason: EditorRecoveryReason) {
+    if (session.closed) return undefined
+    const [source, daemonDocument] = await Promise.all([
+      readSourceDocument(session.sourcePath),
+      readManagedDaemonDocument(new URL(session.iframeUrl).origin, session.daemonToken),
+    ])
+    return this.#recoveryStore.capture({
+      sourcePath: session.sourcePath,
+      // Bind the recovery to the source revision this editor was launched
+      // from. The current disk bytes are used only for the clean comparison.
+      // If the source changed externally from A to B while the daemon became
+      // C, reopening B must surface that the C recovery was based on A.
+      sourceSha256: session.baselineSha256,
+      sourceDocumentJson: source.toString('utf8'),
+      daemonDocument,
+      reason,
+    })
+  }
+
+  async #restoreRecoveryForSession(id: string, recoveryId: string): Promise<{ version: number; docJson: string }> {
+    const session = this.#sessionForControl(id)
+    return this.#enqueueSessionOperation(session, async () => {
+      session.mutating = true
+      try {
+        const recovery = await this.#recoveryStore.read(session.sourcePath, recoveryId)
+        if (recovery === undefined) throw new HttpError(404, 'OpenPencil recovery snapshot not found')
+        const current = await readManagedDaemonDocument(new URL(session.iframeUrl).origin, session.daemonToken)
+        const version = await restoreManagedDaemonDocument(
+          new URL(session.iframeUrl).origin,
+          session.daemonToken,
+          { documentJson: recovery.documentJson, version: current.version },
+        )
+        session.createdAt = Date.now()
+        return { version, docJson: recovery.documentJson }
+      } finally {
+        session.mutating = false
+      }
+    })
+  }
+
+  async #discardRecoveryForSession(id: string, recoveryId: string): Promise<boolean> {
+    const session = this.#sessionForControl(id)
+    return this.#recoveryStore.discard(session.sourcePath, recoveryId)
   }
 
   #activeSession(expectedSourcePath?: string, ownerSessionId?: string): EditorSession {
@@ -844,12 +979,60 @@ export class EditorHostController {
     await stopChild(session.child)
   }
 
+  #enqueueSessionOperation<Result>(session: EditorSession, task: () => Promise<Result>): Promise<Result> {
+    const previous = session.activeOperation ?? Promise.resolve()
+    const result = previous.then(async () => {
+      if (session.closed) throw new HttpError(410, 'editor session ended before operation completed')
+      return task()
+    })
+    const settled = result.then(() => {}, () => {})
+    session.activeOperation = settled
+    void settled.then(() => {
+      if (session.activeOperation === settled) delete session.activeOperation
+    })
+    return result
+  }
+
+  async #waitForSessionOperation(session: EditorSession): Promise<boolean> {
+    const operation = session.activeOperation
+    if (operation === undefined) return true
+    let timer: NodeJS.Timeout | undefined
+    try {
+      return await Promise.race([
+        operation.then(() => true),
+        new Promise<false>(resolveTimeout => {
+          timer = setTimeout(() => resolveTimeout(false), OPERATION_RETIRE_TIMEOUT_MS)
+          timer.unref()
+        }),
+      ])
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }
+
+  async #captureThenDispose(session: EditorSession, reason: EditorRecoveryReason): Promise<void> {
+    try {
+      // A mutation updates the daemon immediately before its promise settles.
+      // Waiting here guarantees recovery observes that final document instead
+      // of an earlier version. A bounded failure skips capture rather than
+      // persisting a known-racy snapshot, then still reaps the child below.
+      if (await this.#waitForSessionOperation(session)) {
+        await this.#captureRecovery(session, reason)
+      }
+    } catch {
+      // Recovery is best-effort, but disposal is mandatory. In particular an
+      // unavailable daemon or cache must never leave an idle/HMR child alive.
+    } finally {
+      await this.#disposeSession(session)
+    }
+  }
+
   #prune(): void {
     const now = Date.now()
     for (const [id, session] of this.#sessions) {
       if (now - session.createdAt > SESSION_IDLE_MS) {
         this.#sessions.delete(id)
-        void this.#disposeSession(session)
+        void this.#captureThenDispose(session, 'plugin-dispose')
       }
     }
   }

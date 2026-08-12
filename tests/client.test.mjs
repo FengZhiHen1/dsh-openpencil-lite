@@ -515,6 +515,217 @@ test('editor launch prefers native details and falls back to the plugin modal', 
   assert.deepEqual(calls, ['details', 'modal'])
 })
 
+test('fallback workbench state is page-owned and survives a Tool card lifecycle', () => {
+  const request = {
+    sessionId: 'session-a',
+    grant: { editor: { launchUrl: '/editor/a' } },
+  }
+  const store = client.createEditorWorkbenchStore()
+  const snapshots = []
+  const unsubscribe = store.subscribe(() => { snapshots.push(store.getSnapshot()) })
+
+  assert.equal(store.open(request), true)
+  assert.equal(store.getSnapshot(), request)
+  // Nothing in this store is tied to the DesignRenderView component that sent
+  // the command, so removing that card does not issue a close operation.
+  assert.deepEqual(snapshots, [request])
+  unsubscribe()
+  assert.equal(store.getSnapshot(), request)
+
+  store.close()
+  assert.equal(store.getSnapshot(), undefined)
+})
+
+test('fallback workbench retains a dirty owner when replacement is denied', () => {
+  const first = { sessionId: 'session-a', grant: { editor: { launchUrl: '/editor/a' } } }
+  const second = { sessionId: 'session-b', grant: { editor: { launchUrl: '/editor/b' } } }
+  let replacementChecks = 0
+  let repeats = 0
+  const store = client.createEditorWorkbenchStore(() => {
+    replacementChecks += 1
+    return false
+  }, () => { repeats += 1 })
+
+  assert.equal(store.open(first), true)
+  assert.equal(store.open(first), true, 'opening the same editor only refocuses it')
+  assert.equal(repeats, 1)
+  assert.equal(replacementChecks, 0)
+  assert.equal(store.open(second), false)
+  assert.equal(replacementChecks, 1)
+  assert.equal(store.getSnapshot(), first)
+})
+
+test('workbench editor identity remounts only the managed document process', () => {
+  const grant = { editor: { launchUrl: '/editor/a' } }
+  assert.equal(client.editorWorkbenchEditorKey(grant, 'session-a'), 'session-a\n/editor/a')
+  assert.notEqual(
+    client.editorWorkbenchEditorKey(grant, 'session-a'),
+    client.editorWorkbenchEditorKey({ editor: { launchUrl: '/editor/b' } }, 'session-a'),
+  )
+  assert.notEqual(
+    client.editorWorkbenchEditorKey(grant, 'session-a'),
+    client.editorWorkbenchEditorKey(grant, 'session-b'),
+  )
+})
+
+test('workbench disposal captures an idle dirty draft without starting a save', async () => {
+  let awaitedSaves = 0
+  let captures = 0
+  const controller = {
+    requestClose: async () => true,
+    awaitExistingSave: async () => {
+      awaitedSaves += 1
+      return true
+    },
+    captureRecovery: async () => {
+      captures += 1
+      return true
+    },
+  }
+
+  assert.equal(
+    await client.preserveEditorBeforeWorkbenchDispose({ dirty: true, phase: 'ready' }, controller),
+    'recovered',
+  )
+  assert.equal(awaitedSaves, 0, 'idle dirty disposal must not invent a source save')
+  assert.equal(captures, 1)
+})
+
+test('workbench disposal joins only an existing save and falls back to recovery', async () => {
+  let awaitedSaves = 0
+  let captures = 0
+  const controller = {
+    requestClose: async () => true,
+    awaitExistingSave: async () => {
+      awaitedSaves += 1
+      return false
+    },
+    captureRecovery: async () => {
+      captures += 1
+      return true
+    },
+  }
+
+  assert.equal(
+    await client.preserveEditorBeforeWorkbenchDispose({ dirty: true, phase: 'saving' }, controller),
+    'recovered',
+  )
+  assert.equal(awaitedSaves, 1)
+  assert.equal(captures, 1)
+
+  controller.awaitExistingSave = async () => {
+    awaitedSaves += 1
+    return true
+  }
+  assert.equal(
+    await client.preserveEditorBeforeWorkbenchDispose({ dirty: true, phase: 'saving' }, controller),
+    'saved',
+  )
+  assert.equal(awaitedSaves, 2)
+  assert.equal(captures, 1, 'a completed in-flight save needs no recovery capture')
+})
+
+test('workbench disposal leaves a clean editor untouched', async () => {
+  let lifecycleCalls = 0
+  const controller = {
+    requestClose: async () => true,
+    awaitExistingSave: async () => { lifecycleCalls += 1; return true },
+    captureRecovery: async () => { lifecycleCalls += 1; return true },
+  }
+
+  assert.equal(
+    await client.preserveEditorBeforeWorkbenchDispose({ dirty: false, phase: 'ready' }, controller),
+    'clean',
+  )
+  assert.equal(lifecycleCalls, 0)
+})
+
+test('unrecovered workbench disposal retains the daemon and skips client DELETE', async () => {
+  for (const captureRecovery of [
+    async () => false,
+    async () => { throw new Error('capture unavailable') },
+  ]) {
+    let retains = 0
+    let clientDeletes = 0
+    const controller = {
+      requestClose: async () => true,
+      awaitExistingSave: async () => true,
+      captureRecovery,
+      retainServerSessionOnUnmount() { retains += 1 },
+    }
+
+    assert.equal(
+      await client.preserveEditorBeforeWorkbenchDispose({ dirty: true, phase: 'ready' }, controller),
+      'unrecovered',
+    )
+    assert.equal(retains, 1, 'capture failure must arm server-session retention before React unmount')
+    assert.equal(
+      client.applyManagedEditorUnmountPolicy({
+        retainServerSession: retains > 0,
+        dirty: true,
+        hasLiveLaunch: true,
+      }, () => { clientDeletes += 1 }),
+      'retained',
+    )
+    assert.equal(clientDeletes, 0, 'unrecovered HMR disposal must not issue client DELETE')
+  }
+})
+
+test('native-style dirty unmount retains its live daemon without a lifecycle controller', () => {
+  let clientDeletes = 0
+  assert.equal(
+    client.applyManagedEditorUnmountPolicy({
+      retainServerSession: false,
+      dirty: true,
+      hasLiveLaunch: true,
+    }, () => { clientDeletes += 1 }),
+    'retained',
+  )
+  assert.equal(clientDeletes, 0)
+})
+
+test('native-style clean unmount keeps the normal guarded close path', () => {
+  let clientDeletes = 0
+  assert.equal(
+    client.applyManagedEditorUnmountPolicy({
+      retainServerSession: false,
+      dirty: false,
+      hasLiveLaunch: true,
+    }, () => { clientDeletes += 1 }),
+    'closed',
+  )
+  assert.equal(clientDeletes, 1)
+})
+
+test('a successful explicit close is not reclassified as a retained dirty unmount', () => {
+  let cleanupCalls = 0
+  assert.equal(
+    client.applyManagedEditorUnmountPolicy({
+      retainServerSession: false,
+      dirty: true,
+      hasLiveLaunch: false,
+    }, () => { cleanupCalls += 1 }),
+    'closed',
+  )
+  assert.equal(cleanupCalls, 1)
+})
+
+test('guarded editor close surfaces a server conflict instead of orphaning silently', async () => {
+  const launch = {
+    sessionId: 'managed-a',
+    closeUrl: '/editor/close-a',
+  }
+  await assert.rejects(
+    client.closeManagedEditorLaunch(launch, {
+      fetcher: async () => new Response(null, { status: 409 }),
+    }),
+    /close failed \(409\)/,
+  )
+  await assert.doesNotReject(client.closeManagedEditorLaunch(launch, {
+    fetcher: async () => new Response(null, { status: 204 }),
+  }))
+})
+
 test('editor bridge maps and emits the resolved DSH locale as BCP 47', () => {
   assert.equal(client.editorLocaleFromDsh('zh'), 'zh-CN')
   assert.equal(client.editorLocaleFromDsh('en'), 'en-US')
@@ -532,6 +743,8 @@ test('editor panel chrome follows the resolved editor locale', () => {
   assert.equal(zh.saved, '已保存')
   assert.equal(zh.loading, '正在加载可编辑的 OpenPencil 画布…')
   assert.equal(zh.errorTitle, 'OpenPencil 编辑器不可用')
+  assert.equal(zh.editorBusy, '另一个 OpenPencil 编辑器仍有未保存的更改。')
+  assert.equal(zh.discard, 'OpenPencil 中有未保存的更改，确定关闭并放弃吗？')
   assert.equal(zh.pngFallback, '打开 PNG 预览')
   assert.equal(zh.editorTitle('home.op'), 'OpenPencil 编辑器：home.op')
   assert.equal(zh.saveConflict(7), 'OpenPencil 保存冲突（服务器版本 7）')
@@ -540,21 +753,66 @@ test('editor panel chrome follows the resolved editor locale', () => {
   assert.equal(en.save, 'Save')
   assert.equal(en.saving, 'Saving…')
   assert.equal(en.loading, 'Loading editable OpenPencil canvas…')
+  assert.equal(en.editorBusy, 'Another OpenPencil editor still has unsaved changes.')
+  assert.equal(en.discard, 'OpenPencil has unsaved changes. Close and discard them?')
   assert.equal(en.editorTitle('home.op'), 'OpenPencil editor: home.op')
   assert.equal(en.syncConflict(7), 'The source changed outside this editor (server v7). Save was stopped.')
 })
 
-test('fallback editor modal chrome follows the resolved editor locale', () => {
+test('fallback editor workbench chrome follows the resolved editor locale', () => {
   assert.deepEqual(client.editorModalCopy('zh-CN'), {
     title: 'OpenPencil 编辑器',
     close: '关闭',
+    fullscreen: '全屏',
+    restore: '退出全屏',
+    resize: '拖动调整编辑区宽度',
     discard: 'OpenPencil 中有未保存的更改，确定关闭并放弃吗？',
   })
   assert.deepEqual(client.editorModalCopy('en-US'), {
     title: 'OpenPencil editor',
     close: 'Close',
+    fullscreen: 'Full screen',
+    restore: 'Exit full screen',
+    resize: 'Drag to resize the editor',
     discard: 'OpenPencil has unsaved changes. Close and discard them?',
   })
+})
+
+test('fallback editor workbench uses a wide right rail and only auto-fullscreens on small screens', () => {
+  assert.equal(client.EDITOR_WORKBENCH_FULLSCREEN_BREAKPOINT, 1200)
+  assert.equal(client.EDITOR_WORKBENCH_MIN_WIDTH, 640)
+  assert.equal(client.EDITOR_WORKBENCH_MAX_WIDTH, 1200)
+  assert.equal(client.EDITOR_WORKBENCH_LEFT_CLEARANCE, 480)
+  assert.equal(client.EDITOR_WORKBENCH_RESIZE_STEP, 32)
+  assert.equal(client.editorWorkbenchUsesFullscreen(1199), true)
+  assert.equal(client.editorWorkbenchUsesFullscreen(1200), false)
+  assert.deepEqual(client.editorWorkbenchWidthBounds(1920), { min: 640, max: 1200, initial: 960 })
+  assert.deepEqual(client.editorWorkbenchWidthBounds(1280), { min: 640, max: 800, initial: 720 })
+  assert.deepEqual(client.editorWorkbenchWidthBounds(1200), { min: 640, max: 720, initial: 720 })
+  assert.equal(client.clampEditorWorkbenchWidth(2000, 1280), 800)
+  assert.equal(client.clampEditorWorkbenchWidth(100, 1280), 640)
+  assert.equal(client.resizedEditorWorkbenchWidth(720, 1000, 900, 1280), 800)
+  assert.equal(client.resizedEditorWorkbenchWidth(720, 1000, 1200, 1280), 640)
+  const preferredWidth = 960
+  assert.equal(client.clampEditorWorkbenchWidth(preferredWidth, 1100), 640, 'a narrow viewport only clamps the effective width')
+  assert.equal(client.clampEditorWorkbenchWidth(preferredWidth, 1920), 960, 'widening restores the unchanged preference')
+})
+
+test('fullscreen editor workbench traps focus at both Tab boundaries', () => {
+  assert.equal(client.editorWorkbenchFocusTargetIndex(3, 0, true), 2, 'Shift+Tab wraps first to last')
+  assert.equal(client.editorWorkbenchFocusTargetIndex(3, 2, false), 0, 'Tab wraps last to first')
+  assert.equal(client.editorWorkbenchFocusTargetIndex(3, 1, false), -1, 'interior Tab keeps native order')
+  assert.equal(client.editorWorkbenchFocusTargetIndex(3, 1, true), -1, 'interior Shift+Tab keeps native order')
+  assert.equal(client.editorWorkbenchFocusTargetIndex(3, -1, false), 0, 'escaped focus returns to first')
+  assert.equal(client.editorWorkbenchFocusTargetIndex(3, -1, true), 2, 'escaped reverse focus returns to last')
+  assert.equal(client.editorWorkbenchFocusTargetIndex(0, -1, false), -1, 'an empty surface falls back to itself')
+})
+
+test('side editor workbench only owns Escape while focus is inside', () => {
+  assert.equal(client.editorWorkbenchShouldHandleEscape(false, false), false)
+  assert.equal(client.editorWorkbenchShouldHandleEscape(false, true), true)
+  assert.equal(client.editorWorkbenchShouldHandleEscape(true, false), true)
+  assert.equal(client.editorWorkbenchShouldHandleEscape(true, true), true)
 })
 
 test('fallback editor modal confirms only when the managed editor is dirty', () => {
@@ -672,6 +930,48 @@ test('editor control capabilities remain on the DSH origin', () => {
     () => client.editorControlUrl('https://example.com/save'),
     /same-origin/,
   )
+})
+
+test('editor recovery controls stay same-origin and restore only after an explicit action', async () => {
+  const recovery = {
+    id: 'a'.repeat(43),
+    capturedAt: 1_800_000_000_000,
+    bytes: 96,
+    sourceName: 'design.op',
+    sourceChangedSinceCapture: false,
+    cacheLabel: `dsh-openpencil/recovery/${'a'.repeat(43)}.json`,
+  }
+  const launch = {
+    sessionId: 'managed-session',
+    recoveryUrl: '/_dsh/dsh-openpencil/editor/session/managed-session/recovery',
+    recovery,
+  }
+  assert.equal(
+    client.editorRecoveryItemUrl(launch, recovery.id),
+    `http://127.0.0.1:3080/_dsh/dsh-openpencil/editor/session/managed-session/recovery/${recovery.id}`,
+  )
+  const calls = []
+  const fetcher = async (url, init) => {
+    calls.push({ url, init })
+    return Response.json({ ok: true, version: 4, docJson: '{"version":"1.0","children":[]}' })
+  }
+  const docJson = await client.restoreManagedEditorRecovery(launch, recovery, fetcher)
+  assert.equal(docJson, '{"version":"1.0","children":[]}')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].init.method, 'POST')
+  assert.equal(calls[0].init.credentials, 'same-origin')
+  assert.equal(client.editorRecoveryCopy('zh-CN').available('design.op').includes('仍需点击“保存”'), true)
+})
+
+test('editor recovery parser rejects path-like or malformed public metadata', () => {
+  assert.equal(client.editorRecoverySummaryOf({
+    id: '../private/source.op',
+    capturedAt: Date.now(),
+    bytes: 3,
+    sourceName: 'source.op',
+    sourceChangedSinceCapture: false,
+    cacheLabel: '/Users/private/recovery.json',
+  }), undefined)
 })
 
 test('expired editor launch refreshes once and prefers current launch docJson', async () => {
@@ -999,6 +1299,8 @@ test('the page-wide editor coordinator closes only the previous owner', () => {
   const second = Symbol('second-editor')
   const releaseFirst = client.claimEditor(first, () => { closed.push('first') })
   const releaseSecond = client.claimEditor(second, () => { closed.push('second') })
+  assert.equal(typeof releaseFirst, 'function')
+  assert.equal(typeof releaseSecond, 'function')
   assert.deepEqual(closed, ['first'])
   releaseFirst()
   const third = Symbol('third-editor')
@@ -1006,6 +1308,25 @@ test('the page-wide editor coordinator closes only the previous owner', () => {
   assert.deepEqual(closed, ['first', 'second'])
   releaseSecond()
   releaseThird()
+})
+
+test('the page-wide editor coordinator lets a dirty owner veto takeover', () => {
+  const calls = []
+  const first = Symbol('dirty-editor')
+  const denied = Symbol('denied-editor')
+  const accepted = Symbol('accepted-editor')
+  const releaseFirst = client.claimEditor(first, () => {
+    calls.push('asked-dirty-owner')
+    return false
+  })
+  assert.equal(typeof releaseFirst, 'function')
+  assert.equal(client.claimEditor(denied, () => { calls.push('denied-owner') }), undefined)
+  assert.deepEqual(calls, ['asked-dirty-owner'])
+
+  releaseFirst()
+  const releaseAccepted = client.claimEditor(accepted, () => { calls.push('accepted-owner') })
+  assert.equal(typeof releaseAccepted, 'function')
+  releaseAccepted()
 })
 
 test('dirty editor close requires explicit confirmation', () => {
