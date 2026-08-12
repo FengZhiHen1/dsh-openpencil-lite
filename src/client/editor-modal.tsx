@@ -344,37 +344,109 @@ export function ManagedOpenPencilEditorModal({
     if (fullscreen) return
     event.preventDefault()
     resizeCleanupRef.current?.()
-    const startWidth = width
-    const startClientX = event.clientX
+    const handle = event.currentTarget
+    const pointerId = event.pointerId
+    const surface = surfaceRef.current
+    const editorFrame = surface?.querySelector('iframe') ?? null
+    const inlineSurfaceWidth = surface === null ? Number.NaN : Number.parseFloat(surface.style.width)
+    let liveWidth = Number.isFinite(inlineSurfaceWidth) ? inlineSurfaceWidth : width
+    let appliedClientX = event.clientX
     const previousCursor = document.body.style.cursor
     const previousUserSelect = document.body.style.userSelect
+    const previousFrameStyle = editorFrame === null ? undefined : {
+      position: editorFrame.style.position,
+      top: editorFrame.style.top,
+      right: editorFrame.style.right,
+      bottom: editorFrame.style.bottom,
+      left: editorFrame.style.left,
+      width: editorFrame.style.width,
+      height: editorFrame.style.height,
+      maxWidth: editorFrame.style.maxWidth,
+      pointerEvents: editorFrame.style.pointerEvents,
+    }
     document.body.style.cursor = 'ew-resize'
     document.body.style.userSelect = 'none'
+    if (editorFrame !== null) {
+      const frameWidth = editorFrame.getBoundingClientRect().width
+      Object.assign(editorFrame.style, {
+        position: 'absolute', top: '0', right: '0', bottom: '0', left: 'auto',
+        width: `${frameWidth}px`, height: '100%', maxWidth: 'none', pointerEvents: 'none',
+      })
+    }
+    try { handle.setPointerCapture(pointerId) } catch { /* the window listeners remain as a fallback */ }
     let animationFrame: number | undefined
-    let nextClientX = startClientX
+    let nextClientX = event.clientX
+    let stopped = false
+
+    const applyWidth = (clientX: number): number => {
+      liveWidth = resizedEditorWorkbenchWidth(liveWidth, appliedClientX, clientX, window.innerWidth)
+      appliedClientX = clientX
+      if (surface !== null) surface.style.width = `${liveWidth}px`
+      handle.setAttribute('aria-valuenow', String(Math.round(liveWidth)))
+      return liveWidth
+    }
+    const flushWidth = (): number => {
+      if (animationFrame !== undefined) {
+        window.cancelAnimationFrame(animationFrame)
+        animationFrame = undefined
+      }
+      return applyWidth(nextClientX)
+    }
     const onMove = (moveEvent: PointerEvent): void => {
-      nextClientX = moveEvent.clientX
+      if (moveEvent.pointerId !== pointerId) return
+      const coalesced = moveEvent.getCoalescedEvents?.()
+      nextClientX = coalesced?.at(-1)?.clientX ?? moveEvent.clientX
       if (animationFrame !== undefined) return
       animationFrame = window.requestAnimationFrame(() => {
         animationFrame = undefined
-        setPreferredWidth(resizedEditorWorkbenchWidth(startWidth, startClientX, nextClientX, window.innerWidth))
+        applyWidth(nextClientX)
       })
     }
-    const stop = (): void => {
+    const cleanup = (): void => {
+      if (stopped) return
+      stopped = true
       if (animationFrame !== undefined) window.cancelAnimationFrame(animationFrame)
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', stop)
-      window.removeEventListener('pointercancel', stop)
-      window.removeEventListener('blur', stop)
+      window.removeEventListener('pointermove', onMove, true)
+      window.removeEventListener('pointerup', onPointerEnd, true)
+      window.removeEventListener('pointercancel', onPointerCancel, true)
+      window.removeEventListener('blur', onBlur)
+      handle.removeEventListener('lostpointercapture', onLostPointerCapture)
+      try {
+        if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId)
+      } catch { /* capture may already have been released by the browser */ }
       document.body.style.cursor = previousCursor
       document.body.style.userSelect = previousUserSelect
+      if (editorFrame !== null && previousFrameStyle !== undefined) Object.assign(editorFrame.style, previousFrameStyle)
       resizeCleanupRef.current = undefined
     }
-    resizeCleanupRef.current = stop
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', stop)
-    window.addEventListener('pointercancel', stop)
-    window.addEventListener('blur', stop)
+    const finish = (): void => {
+      if (stopped) return
+      const finalWidth = flushWidth()
+      cleanup()
+      setPreferredWidth(finalWidth)
+    }
+    function onPointerEnd(endEvent: PointerEvent): void {
+      if (endEvent.pointerId !== pointerId) return
+      nextClientX = Number.isFinite(endEvent.clientX) ? endEvent.clientX : nextClientX
+      finish()
+    }
+    function onPointerCancel(cancelEvent: PointerEvent): void {
+      if (cancelEvent.pointerId === pointerId) finish()
+    }
+    function onBlur(): void { finish() }
+    function onLostPointerCapture(lostEvent: PointerEvent): void {
+      if (lostEvent.pointerId === pointerId) finish()
+    }
+
+    resizeCleanupRef.current = cleanup
+    // Capture phase cannot be interrupted by the embedded editor or another
+    // host listener. Pointer capture keeps the handle as the event target even
+    // while the pointer crosses the editor iframe.
+    window.addEventListener('pointermove', onMove, true)
+    window.addEventListener('pointerup', onPointerEnd, true)
+    window.addEventListener('pointercancel', onPointerCancel, true)
+    window.addEventListener('blur', onBlur)
+    handle.addEventListener('lostpointercapture', onLostPointerCapture)
   }, [fullscreen, width])
 
   const resizeWithKeyboard = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {

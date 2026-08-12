@@ -1032,6 +1032,13 @@ test('fallback editor workbench uses a wide right rail and only auto-fullscreens
   assert.equal(client.clampEditorWorkbenchWidth(100, 1280), 640)
   assert.equal(client.resizedEditorWorkbenchWidth(720, 1000, 900, 1280), 800)
   assert.equal(client.resizedEditorWorkbenchWidth(720, 1000, 1200, 1280), 640)
+  const clampedAtMax = client.resizedEditorWorkbenchWidth(800, 900, 700, 1280)
+  assert.equal(clampedAtMax, 800)
+  assert.equal(
+    client.resizedEditorWorkbenchWidth(clampedAtMax, 700, 710, 1280),
+    790,
+    'incremental drag coordinates leave a width bound immediately when the pointer reverses',
+  )
   const preferredWidth = 960
   assert.equal(client.clampEditorWorkbenchWidth(preferredWidth, 1100), 640, 'a narrow viewport only clamps the effective width')
   assert.equal(client.clampEditorWorkbenchWidth(preferredWidth, 1920), 960, 'widening restores the unchanged preference')
