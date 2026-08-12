@@ -337,6 +337,52 @@ export interface EditorUnmountState {
   hasLiveLaunch: boolean
 }
 
+export interface EditorInitRetryTimer<T> {
+  schedule: (callback: () => void, delayMs: number) => T
+  cancel: (handle: T) => void
+}
+
+/**
+ * Start the managed-editor init handshake immediately, then retry on a bounded
+ * interval until the caller stops it after `op-bridge/ready`.
+ *
+ * This deliberately starts before the iframe `load` event. OpenPencil waits
+ * briefly for this token before starting daemon-backed services (including the
+ * account-status request), while a browser may delay `load` until module/Wasm
+ * startup is already complete. Waiting for `load` can therefore make the first
+ * account request run unauthenticated and hide the login button until the
+ * editor's later health refresh.
+ */
+export function beginEditorInitRetry<T>(
+  send: () => void,
+  onExhausted: () => void,
+  timer: EditorInitRetryTimer<T>,
+  options: { intervalMs?: number; maxAttempts?: number } = {},
+): () => void {
+  const intervalMs = options.intervalMs ?? 500
+  const maxAttempts = options.maxAttempts ?? 20
+  let attempts = 0
+  let handle: T | undefined
+  let stopped = false
+  const stop = (): void => {
+    if (stopped) return
+    stopped = true
+    if (handle !== undefined) timer.cancel(handle)
+  }
+  const attempt = (): void => {
+    if (stopped) return
+    attempts += 1
+    send()
+    if (attempts >= maxAttempts) {
+      stop()
+      onExhausted()
+    }
+  }
+  attempt()
+  if (!stopped) handle = timer.schedule(attempt, intervalMs)
+  return stop
+}
+
 /**
  * Apply the unmount policy without letting React cleanup accidentally issue
  * DELETE. Dirty live launches are retained by default even when their native
@@ -386,7 +432,7 @@ export function ManagedOpenPencilEditor({
   lifecycleStateRef.current = onLifecycleState
   const lifecycleControllerRef = useRef(onLifecycleController)
   lifecycleControllerRef.current = onLifecycleController
-  const initTimerRef = useRef<ReturnType<typeof setInterval>>()
+  const stopInitLoopRef = useRef<() => void>()
   const selectionPollStopRef = useRef<() => void>()
   const requestCounterRef = useRef(0)
   const saveWaitersRef = useRef(new Map<string, { resolve: (message: Extract<EditorInboundMessage, { type: 'op-bridge/snapshot-result' }>) => void; reject: (error: Error) => void }>())
@@ -596,7 +642,8 @@ export function ManagedOpenPencilEditor({
       cancelled = true
       abort.abort()
       releaseEditor()
-      if (initTimerRef.current !== undefined) clearInterval(initTimerRef.current)
+      stopInitLoopRef.current?.()
+      stopInitLoopRef.current = undefined
       const disposed = new Error('OpenPencil editor closed')
       for (const waiter of saveWaitersRef.current.values()) waiter.reject(disposed)
       saveWaitersRef.current.clear()
@@ -615,6 +662,40 @@ export function ManagedOpenPencilEditor({
       }
     }
   }, [documentGrant.path, documentGrant.url, editorGrant.launchUrl, editorGrant.refreshUrl, updatePhase])
+
+  const startInitLoop = useCallback((): void => {
+    const launch = launchRef.current
+    if (launch === undefined) return
+    stopInitLoopRef.current?.()
+    stopInitLoopRef.current = beginEditorInitRetry(
+      () => {
+        post({ type: 'op-bridge/init', token: launch.token })
+        post({ type: 'op-bridge/theme', colorScheme: colorSchemeRef.current })
+        post({ type: 'op-bridge/locale', locale: localeRef.current })
+      },
+      () => {
+        stopInitLoopRef.current = undefined
+        setFailure(editorPanelCopy(localeRef.current).editorTimeout)
+        updatePhase('error')
+      },
+      {
+        schedule: (callback, delayMs) => window.setInterval(callback, delayMs),
+        cancel: handle => { window.clearInterval(handle) },
+      },
+    )
+  }, [post, updatePhase])
+
+  // Begin posting as soon as React commits the iframe. Tying this to `load`
+  // is too late for OpenPencil's managed bootstrap: its Wasm shell may have
+  // already fallen back to an unauthenticated first status request by then.
+  useEffect(() => {
+    if (phase !== 'loading' || launchRef.current === undefined || iframeRef.current === null) return
+    startInitLoop()
+    return () => {
+      stopInitLoopRef.current?.()
+      stopInitLoopRef.current = undefined
+    }
+  }, [phase, startInitLoop])
 
   useEffect(() => {
     if (phase !== 'ready' && phase !== 'saving') return
@@ -642,8 +723,8 @@ export function ManagedOpenPencilEditor({
       if (message === undefined) return
       switch (message.type) {
         case 'op-bridge/ready':
-          if (initTimerRef.current !== undefined) clearInterval(initTimerRef.current)
-          initTimerRef.current = undefined
+          stopInitLoopRef.current?.()
+          stopInitLoopRef.current = undefined
           post({ type: 'op-bridge/theme', colorScheme: colorSchemeRef.current })
           post({ type: 'op-bridge/locale', locale: localeRef.current })
           post({ type: 'op-bridge/open-document', json: docJsonRef.current })
@@ -699,27 +780,6 @@ export function ManagedOpenPencilEditor({
     return () => { window.removeEventListener('beforeunload', beforeUnload) }
   }, [])
 
-  const startInitLoop = (): void => {
-    const launch = launchRef.current
-    if (launch === undefined) return
-    if (initTimerRef.current !== undefined) clearInterval(initTimerRef.current)
-    let attempts = 0
-    const sendInit = (): void => {
-      attempts += 1
-      post({ type: 'op-bridge/init', token: launch.token })
-      post({ type: 'op-bridge/theme', colorScheme: colorSchemeRef.current })
-      post({ type: 'op-bridge/locale', locale: localeRef.current })
-      if (attempts >= 20 && initTimerRef.current !== undefined) {
-        clearInterval(initTimerRef.current)
-        initTimerRef.current = undefined
-        setFailure(editorPanelCopy(localeRef.current).editorTimeout)
-        updatePhase('error')
-      }
-    }
-    sendInit()
-    initTimerRef.current = setInterval(sendInit, 500)
-  }
-
   const title = documentGrant.path?.replaceAll('\\', '/').split('/').at(-1) ?? 'OpenPencil'
   const copy = editorPanelCopy(locale)
   return (
@@ -745,7 +805,6 @@ export function ManagedOpenPencilEditor({
             title={copy.editorTitle(title)}
             allow="clipboard-read; clipboard-write"
             tabIndex={phase === 'ready' || phase === 'saving' ? 0 : -1}
-            onLoad={startInitLoop}
           />
         ) : null}
         {phase === 'launching' || phase === 'loading' ? <div style={panelStyles.overlay} role="status">{copy.loading}</div> : null}

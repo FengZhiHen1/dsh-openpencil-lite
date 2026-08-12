@@ -68,6 +68,7 @@ export {
 } from './frame-gallery.js'
 export {
   applyManagedEditorUnmountPolicy,
+  beginEditorInitRetry,
   closeManagedEditorLaunch,
   editorPanelCopy,
   launchManagedEditor,

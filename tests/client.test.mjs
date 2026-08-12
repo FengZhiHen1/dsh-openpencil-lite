@@ -683,6 +683,36 @@ test('editor bridge emits the strict resolved DSH theme message', () => {
   assert.deepEqual(client.inject, ['slots', 'theme', 'locale'])
 })
 
+test('managed editor init starts before iframe load and retries until stopped', () => {
+  const sent = []
+  const scheduled = []
+  const cancelled = []
+  const stop = client.beginEditorInitRetry(
+    () => { sent.push('init') },
+    () => { sent.push('timeout') },
+    {
+      schedule(callback, delayMs) {
+        const handle = { callback, delayMs }
+        scheduled.push(handle)
+        return handle
+      },
+      cancel(handle) { cancelled.push(handle) },
+    },
+    { intervalMs: 500, maxAttempts: 3 },
+  )
+
+  assert.deepEqual(sent, ['init'], 'first init must not wait for the iframe load event')
+  assert.equal(scheduled.length, 1)
+  assert.equal(scheduled[0].delayMs, 500)
+  scheduled[0].callback()
+  assert.deepEqual(sent, ['init', 'init'])
+
+  stop()
+  assert.deepEqual(cancelled, [scheduled[0]])
+  scheduled[0].callback()
+  assert.deepEqual(sent, ['init', 'init'], 'stopped retry callbacks are inert')
+})
+
 test('registers canonical OpenPencil render views and client-only legacy replay aliases', () => {
   const registrations = []
   client.apply({
