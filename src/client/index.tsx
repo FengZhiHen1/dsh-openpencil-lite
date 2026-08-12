@@ -34,6 +34,10 @@ import { FrameGallery, normalizeFrameIndex as normalizedFrameIndex } from './fra
 import type { GalleryFrame, GalleryLocale } from './frame-gallery.js'
 import { OpenPencilSelectionDock } from './selection-dock.js'
 import {
+  presentationHydrationRequestOf,
+  requestPresentationGrant,
+} from './presentation-hydration.js'
+import {
   LEGACY_DESIGN_RENDER_TOOL_NAME,
   OPENPENCIL_RENDER_TOOL_NAME,
 } from '../tool-names.js'
@@ -138,6 +142,12 @@ export {
   selectionNodeDetail,
   selectionNodeLabel,
 } from './selection-dock.js'
+export {
+  documentSha256FromCanonicalResult,
+  PRESENTATION_HYDRATION_ENDPOINT,
+  presentationHydrationRequestOf,
+  requestPresentationGrant,
+} from './presentation-hydration.js'
 
 /** Presentation metadata key the host half projects into `block.meta`. */
 export const PRESENTATION_META_KEY = '$dshOpenPencil'
@@ -161,6 +171,7 @@ const DESIGN_RENDER_COPY = {
     editSource: 'Edit source .op',
     downloadSource: 'Download source .op',
     inspectToolCall: 'Inspect tool call',
+    recoveringPreview: 'Recovering the OpenPencil preview…',
     noPreview: 'No preview channel available in this host.',
     canvas: 'OpenPencil canvas',
     zoomOut: 'Zoom out',
@@ -192,6 +203,7 @@ const DESIGN_RENDER_COPY = {
     editSource: '编辑源文件 .op',
     downloadSource: '下载源文件 .op',
     inspectToolCall: '检查工具调用',
+    recoveringPreview: '正在恢复 OpenPencil 预览…',
     noPreview: '当前宿主没有可用的预览通道。',
     canvas: 'OpenPencil 画布',
     zoomOut: '缩小',
@@ -339,9 +351,8 @@ function editorGrantOf(value: unknown): EditorGrant | undefined {
 }
 
 /** Parse both the established v1 envelope and the additive v2 shape. */
-export function grantOf(block: ToolCallViewProps['block']): PresentationGrant | undefined {
-  if (!('kind' in block) || block.isError) return undefined
-  const meta = isRecord(block.meta) ? block.meta : undefined
+export function presentationGrantOfMeta(metaValue: unknown): PresentationGrant | undefined {
+  const meta = isRecord(metaValue) ? metaValue : undefined
   const envelope = meta?.[PRESENTATION_META_KEY]
   if (!isRecord(envelope) || (envelope.schemaVersion !== 1 && envelope.schemaVersion !== 2)) return undefined
   const frames = imageGrantsOf(envelope.frames)
@@ -360,6 +371,11 @@ export function grantOf(block: ToolCallViewProps['block']): PresentationGrant | 
     fidelity: optionalString(envelope, 'fidelity'),
     warnings: optionalStrings(envelope, 'warnings'),
   }
+}
+
+export function grantOf(block: ToolCallViewProps['block']): PresentationGrant | undefined {
+  if (!('kind' in block) || block.isError) return undefined
+  return presentationGrantOfMeta(block.meta)
 }
 
 /** Flatten the durable result text for the fallback disclosure. */
@@ -686,6 +702,8 @@ function CanvasModal({ grant, onClose, locale }: {
 /** Render one OpenPencil render tool call as a PNG-first card. */
 export function DesignRenderView({
   block,
+  callId,
+  toolName,
   openDetails,
   openFile,
   inspect,
@@ -699,7 +717,24 @@ export function DesignRenderView({
   const settled = 'kind' in block
   const error = settled && block.isError
   const running = !settled
-  const grant = grantOf(block)
+  const embeddedGrant = grantOf(block)
+  const hydrationRequest = !running && !error
+    ? presentationHydrationRequestOf({
+      block,
+      toolName,
+      sessionId: String(sessionId),
+      callId,
+      embeddedGrant,
+    })
+    : undefined
+  const hydrationKey = hydrationRequest === undefined
+    ? undefined
+    : `${hydrationRequest.sessionId}\n${hydrationRequest.callId}\n${hydrationRequest.documentSha256}`
+  const [hydrated, setHydrated] = useState<{ key: string; grant: PresentationGrant }>()
+  const [hydrationFailedKey, setHydrationFailedKey] = useState<string>()
+  const grant = embeddedGrant
+    ?? (hydrated !== undefined && hydrated.key === hydrationKey ? hydrated.grant : undefined)
+  const hydrationPending = hydrationKey !== undefined && hydrationFailedKey !== hydrationKey
   const copy = designRenderCopy(locale)
   const text = resultText(block)
   const frames = grant?.frames ?? []
@@ -708,6 +743,21 @@ export function DesignRenderView({
   const selectedFrame = frames[currentFrameIndex] ?? grant?.image
   const [modalToken, setModalToken] = useState<symbol>()
   const releaseRef = useRef<() => void>()
+
+  useEffect(() => {
+    if (hydrationKey === undefined || hydrationRequest === undefined) return
+    const controller = new AbortController()
+    void requestPresentationGrant(hydrationRequest, presentationGrantOfMeta, { signal: controller.signal }).then(nextGrant => {
+      if (nextGrant !== undefined && !controller.signal.aborted) {
+        setHydrated({ key: hydrationKey, grant: nextGrant })
+      } else if (!controller.signal.aborted) {
+        setHydrationFailedKey(hydrationKey)
+      }
+    })
+    return () => { controller.abort() }
+    // The semantic key contains every request field. Depending on `block`
+    // itself would restart a local exchange whenever DSH reprojects a snapshot.
+  }, [hydrationKey])
 
   const closeCanvas = useCallback(() => {
     releaseRef.current?.()
@@ -725,11 +775,15 @@ export function DesignRenderView({
   }, [])
 
   const openEditor = useCallback(() => {
-    requestOpenPencilEditor(openDetails, () => {
+    // A nested Code-mode result has no durable `block.meta`, so DSH's native
+    // details owner would receive the unhydrated block. Keep that recovered
+    // grant in our page-owned workbench instead. Embedded metadata continues
+    // to prefer the native details surface.
+    requestOpenPencilEditor(embeddedGrant === undefined ? undefined : openDetails, () => {
       if (grant === undefined) return
       void openEditorWorkbench?.({ grant, sessionId: String(sessionId) })
     })
-  }, [grant, openDetails, openEditorWorkbench, sessionId])
+  }, [embeddedGrant, grant, openDetails, openEditorWorkbench, sessionId])
 
   useEffect(() => () => { releaseRef.current?.() }, [])
   useEffect(() => { setSelectedFrameIndex(0) }, [frames.map(frame => frame.previewUrl).join('\n')])
@@ -762,7 +816,7 @@ export function DesignRenderView({
             {grant.document !== undefined && grant.viewer !== undefined ? <button type="button" style={styles.primaryButton} onClick={openCanvas}>{copy.openInteractiveCanvas}</button> : null}
             {grant.document !== undefined && grant.editor?.enabled === true ? (
               <button type="button" style={styles.primaryButton} onClick={openEditor}>
-                {openDetails === undefined ? copy.editCanvas : copy.editInSidebar}
+                {openDetails === undefined || embeddedGrant === undefined ? copy.editCanvas : copy.editInSidebar}
               </button>
             ) : null}
             {selectedFrame !== undefined && openFile !== undefined ? (
@@ -776,7 +830,10 @@ export function DesignRenderView({
             {inspect !== undefined ? <button type="button" style={styles.button} onClick={inspect}>{copy.inspectToolCall}</button> : null}
           </div>
         ) : null}
-        {!running && !error && grant === undefined ? (
+        {!running && !error && grant === undefined && hydrationPending ? (
+          <p style={styles.muted} role="status">{copy.recoveringPreview}</p>
+        ) : null}
+        {!running && !error && grant === undefined && !hydrationPending ? (
           <><p style={styles.muted}>{copy.noPreview}</p>{text !== null ? <pre style={{ ...styles.pre, marginTop: 8 }}>{text}</pre> : null}</>
         ) : null}
       </div>

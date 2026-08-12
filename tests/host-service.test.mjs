@@ -31,6 +31,8 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
     },
   }
   const ctx = {
+    sessions: { get() { return undefined } },
+    get() { return undefined },
     tools: {
       register(tool) {
         registeredTools.push(tool)
@@ -39,6 +41,9 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
     },
     effect(install) {
       return install()
+    },
+    on() {
+      return () => {}
     },
     inject(services, install) {
       injectedServices.push([...services])
@@ -71,6 +76,7 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
       routeRegistrations.map(route => ({ kind: route.kind, path: route.path })),
       [
         { kind: 'prefix', path: '/_dsh/dsh-openpencil/render' },
+        { kind: 'exact', path: '/_dsh/dsh-openpencil/presentation' },
         { kind: 'prefix', path: '/_dsh/dsh-openpencil/viewer-assets' },
         { kind: 'prefix', path: '/_dsh/dsh-openpencil/editor' },
       ],

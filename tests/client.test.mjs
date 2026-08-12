@@ -23,6 +23,32 @@ function settled(meta) {
   }
 }
 
+const DOCUMENT_SHA256 = 'a'.repeat(64)
+
+function canonicalRenderResult(documentSha256 = DOCUMENT_SHA256, extraContent = []) {
+  return {
+    kind: 'tool-result',
+    isError: false,
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        path: '/private/render.png',
+        sourcePath: '/private/design.op',
+        document: { path: '/private/snapshot.op', sha256: documentSha256 },
+      }),
+    }, ...extraContent],
+  }
+}
+
+function hydratedEnvelope() {
+  return {
+    $dshOpenPencil: {
+      schemaVersion: 2,
+      document: { url: '/_dsh/dsh-openpencil/document/signed' },
+    },
+  }
+}
+
 function memoryStorage() {
   const values = new Map()
   return {
@@ -140,6 +166,217 @@ test('supports schema v2 and legacy source URL aliases', () => {
   assert.equal(grant.document.path, '/designs/legacy.op')
 })
 
+test('extracts only a valid document fingerprint from one canonical text result', () => {
+  assert.equal(client.documentSha256FromCanonicalResult(canonicalRenderResult()), DOCUMENT_SHA256)
+  assert.equal(client.documentSha256FromCanonicalResult(canonicalRenderResult('not-a-sha256')), undefined)
+  assert.equal(client.documentSha256FromCanonicalResult(canonicalRenderResult(
+    DOCUMENT_SHA256,
+    [{ type: 'text', text: '{}' }],
+  )), undefined)
+  assert.equal(client.documentSha256FromCanonicalResult({
+    ...canonicalRenderResult(),
+    isError: true,
+  }), undefined)
+  assert.equal(client.documentSha256FromCanonicalResult({
+    kind: 'tool-result',
+    isError: false,
+    content: [{ type: 'text', text: ' '.repeat(1024 * 1024 + 1) }],
+  }), undefined, 'oversized historical results must be rejected before JSON parsing')
+})
+
+test('hydrates a nested render grant with an exact same-origin fingerprint request', async () => {
+  const calls = []
+  const fetcher = async (input, init) => {
+    calls.push({ input, init })
+    return { ok: true, json: async () => hydratedEnvelope() }
+  }
+  const request = {
+    sessionId: 'session-nested',
+    callId: 'call-nested',
+    documentSha256: DOCUMENT_SHA256,
+  }
+  const grant = await client.requestPresentationGrant(
+    request,
+    client.presentationGrantOfMeta,
+    { fetcher },
+  )
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].input, '/_dsh/dsh-openpencil/presentation')
+  assert.equal(calls[0].init.method, 'POST')
+  assert.equal(calls[0].init.credentials, 'same-origin')
+  assert.equal(calls[0].init.headers['content-type'], 'application/json')
+  assert.deepEqual(JSON.parse(calls[0].init.body), request)
+  assert.deepEqual(Object.keys(JSON.parse(calls[0].init.body)), [
+    'sessionId', 'callId', 'documentSha256',
+  ])
+  assert.equal(grant.document.url, '/_dsh/dsh-openpencil/document/signed')
+})
+
+test('presentation hydration fails closed on HTTP and malformed response data', async () => {
+  const request = {
+    sessionId: 'session-failure',
+    callId: 'call-failure',
+    documentSha256: DOCUMENT_SHA256,
+  }
+  assert.equal(await client.requestPresentationGrant(request, client.presentationGrantOfMeta, {
+    fetcher: async () => ({ ok: false, json: async () => { throw new Error('must not read') } }),
+  }), undefined)
+  assert.equal(await client.requestPresentationGrant(request, client.presentationGrantOfMeta, {
+    fetcher: async () => ({ ok: true, json: async () => ({}) }),
+  }), undefined)
+  assert.equal(await client.requestPresentationGrant(request, client.presentationGrantOfMeta, {
+    fetcher: async () => ({
+      ok: true,
+      json: async () => ({ $dshOpenPencil: { schemaVersion: 99, document: { url: '/forged' } } }),
+    }),
+  }), undefined)
+  assert.equal(await client.requestPresentationGrant(request, () => { throw new Error('bad parser') }, {
+    fetcher: async () => ({ ok: true, json: async () => hydratedEnvelope() }),
+  }), undefined)
+})
+
+test('presentation hydration coalesces concurrent requests and isolates subscriber aborts', async () => {
+  let resolveResponse
+  const response = new Promise(resolve => { resolveResponse = resolve })
+  const calls = []
+  const fetcher = async (input, init) => {
+    calls.push({ input, init })
+    return response
+  }
+  const request = {
+    sessionId: 'session-dedupe',
+    callId: 'call-dedupe',
+    documentSha256: DOCUMENT_SHA256,
+  }
+  const firstAbort = new AbortController()
+  const first = client.requestPresentationGrant(request, client.presentationGrantOfMeta, {
+    fetcher,
+    signal: firstAbort.signal,
+  })
+  const second = client.requestPresentationGrant(request, client.presentationGrantOfMeta, { fetcher })
+  await flushAsync()
+  assert.equal(calls.length, 1)
+  firstAbort.abort()
+  assert.equal(await first, undefined)
+  assert.equal(calls[0].init.signal.aborted, false, 'one subscriber must not cancel another')
+
+  resolveResponse({ ok: true, json: async () => hydratedEnvelope() })
+  const grant = await second
+  assert.equal(grant.document.url, '/_dsh/dsh-openpencil/document/signed')
+})
+
+test('an abandoned hydration does not poison an immediate remount retry', async () => {
+  const calls = []
+  const fetcher = async (_input, init) => {
+    calls.push(init)
+    if (calls.length === 1) {
+      return await new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+      })
+    }
+    return { ok: true, json: async () => hydratedEnvelope() }
+  }
+  const request = {
+    sessionId: 'session-remount',
+    callId: 'call-remount',
+    documentSha256: DOCUMENT_SHA256,
+  }
+  const firstAbort = new AbortController()
+  const first = client.requestPresentationGrant(request, client.presentationGrantOfMeta, {
+    fetcher,
+    signal: firstAbort.signal,
+  })
+  await flushAsync()
+  firstAbort.abort()
+  const retry = client.requestPresentationGrant(request, client.presentationGrantOfMeta, { fetcher })
+  assert.equal(await first, undefined)
+  const grant = await retry
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0].signal.aborted, true)
+  assert.equal(grant.document.url, '/_dsh/dsh-openpencil/document/signed')
+})
+
+test('pre-aborted hydration never starts network work', async () => {
+  let calls = 0
+  const controller = new AbortController()
+  controller.abort()
+  assert.equal(await client.requestPresentationGrant({
+    sessionId: 'session-aborted',
+    callId: 'call-aborted',
+    documentSha256: DOCUMENT_SHA256,
+  }, client.presentationGrantOfMeta, {
+    signal: controller.signal,
+    fetcher: async () => {
+      calls += 1
+      return { ok: true, json: async () => hydratedEnvelope() }
+    },
+  }), undefined)
+  assert.equal(calls, 0)
+})
+
+test('embedded presentation metadata prevents a hydration request', async () => {
+  let calls = 0
+  const block = {
+    ...canonicalRenderResult(),
+    meta: hydratedEnvelope(),
+  }
+  const embeddedGrant = client.grantOf(block)
+  const request = client.presentationHydrationRequestOf({
+    block,
+    toolName: 'openpencil_render',
+    sessionId: 'session-embedded',
+    callId: 'call-embedded',
+    embeddedGrant,
+  })
+  if (request !== undefined) {
+    await client.requestPresentationGrant(request, client.presentationGrantOfMeta, {
+      fetcher: async () => {
+        calls += 1
+        return { ok: true, json: async () => hydratedEnvelope() }
+      },
+    })
+  }
+  assert.equal(request, undefined)
+  assert.equal(calls, 0)
+})
+
+test('only the canonical openpencil_render registration can request hydration', () => {
+  const block = canonicalRenderResult()
+  assert.deepEqual(client.presentationHydrationRequestOf({
+    block,
+    toolName: 'openpencil_render',
+    sessionId: 'session-canonical',
+    callId: 'call-canonical',
+    embeddedGrant: undefined,
+  }), {
+    sessionId: 'session-canonical',
+    callId: 'call-canonical',
+    documentSha256: DOCUMENT_SHA256,
+  })
+  assert.equal(client.presentationHydrationRequestOf({
+    block,
+    toolName: 'design_render',
+    sessionId: 'session-legacy',
+    callId: 'call-legacy',
+    embeddedGrant: undefined,
+  }), undefined)
+  assert.equal(client.presentationHydrationRequestOf({
+    block,
+    toolName: 'openpencil_render',
+    sessionId: 's'.repeat(257),
+    callId: 'call-too-long-session',
+    embeddedGrant: undefined,
+  }), undefined)
+  assert.equal(client.presentationHydrationRequestOf({
+    block,
+    toolName: 'openpencil_render',
+    sessionId: 'session-too-long-call',
+    callId: 'c'.repeat(513),
+    embeddedGrant: undefined,
+  }), undefined)
+})
+
 test('preserves ordered top-level frame grants for the gallery', () => {
   const grant = client.grantOf(settled({
     $dshOpenPencil: {
@@ -247,12 +484,14 @@ test('gallery and render-card copy follow the resolved DSH locale', () => {
   assert.equal(zhCard.editCanvas, '编辑画布')
   assert.equal(zhCard.editInSidebar, '在侧边栏编辑')
   assert.equal(zhCard.downloadPng, '下载 PNG')
+  assert.equal(zhCard.recoveringPreview, '正在恢复 OpenPencil 预览…')
   assert.equal(zhCard.noPreview, '当前宿主没有可用的预览通道。')
 
   const enCard = client.designRenderCopy('en')
   assert.equal(enCard.designRender, 'OpenPencil render')
   assert.equal(enCard.openInteractiveCanvas, 'Open interactive canvas')
   assert.equal(enCard.editCanvas, 'Edit canvas')
+  assert.equal(enCard.recoveringPreview, 'Recovering the OpenPencil preview…')
   assert.equal(enCard.noPreview, 'No preview channel available in this host.')
 })
 

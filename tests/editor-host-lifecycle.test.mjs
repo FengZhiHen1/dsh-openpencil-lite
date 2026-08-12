@@ -169,7 +169,7 @@ class MockResponse extends EventEmitter {
   }
 }
 
-function pendingRequest(path, method, origin) {
+function pendingRequest(path, method, origin, remoteAddress = '127.0.0.1') {
   const request = new PassThrough()
   request.url = path
   request.method = method
@@ -178,7 +178,20 @@ function pendingRequest(path, method, origin) {
     host: new URL(origin).host,
     'content-type': 'application/json',
   }
+  Object.defineProperty(request, 'socket', {
+    configurable: true,
+    value: { remoteAddress },
+  })
   return request
+}
+
+async function dispatchControllerRequest(controller, path, method, origin, remoteAddress, body = '') {
+  const request = pendingRequest(path, method, origin, remoteAddress)
+  const response = new MockResponse()
+  const handled = controller.handle(request, response)
+  request.end(body)
+  await handled
+  return response
 }
 
 function isAlive(pid) {
@@ -278,6 +291,83 @@ async function createHarness(delayMs) {
     },
   }
 }
+
+test('editor peer classifier accepts only loopback network addresses', async () => {
+  const { isLoopbackRemoteAddress } = await import(`../lib/editor-host.js?peer=${Date.now()}-${Math.random()}`)
+  for (const address of [
+    '127.0.0.1',
+    '127.255.255.254',
+    '::1',
+    '::ffff:127.0.0.1',
+    '::ffff:127.42.3.9',
+    '::ffff:7f00:1',
+  ]) assert.equal(isLoopbackRemoteAddress(address), true, address)
+  for (const address of [
+    undefined,
+    'localhost',
+    '0.0.0.0',
+    '192.0.2.44',
+    '::',
+    '::ffff:126.255.255.255',
+    '::ffff:128.0.0.1',
+    '::ffff:c000:22c',
+  ]) assert.equal(isLoopbackRemoteAddress(address), false, String(address))
+})
+
+test('editor launch capability rejects a non-loopback socket despite spoofed loopback Host and Origin', async () => {
+  const harness = await createHarness(0)
+  try {
+    const response = await dispatchControllerRequest(
+      harness.controller,
+      harness.grant.launchUrl,
+      'POST',
+      harness.origin,
+      '192.0.2.44',
+      JSON.stringify({ sessionId: 'remote-attacker' }),
+    )
+    assert.equal(response.statusCode, 403)
+    assert.match(JSON.parse(response.body).error, /loopback network peer/)
+    assert.equal((await readFile(harness.logPath, 'utf8')).trim(), '', 'rejected peer must not start an editor child')
+    await assert.rejects(harness.controller.getActiveSelection(), /No active OpenPencil editor/)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('selection bearer remains usable by local GETs without Origin and rejects remote peers', async () => {
+  const harness = await createHarness(0)
+  try {
+    const launch = await (await harness.request(harness.grant.launchUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: 'selection-peer-test' }),
+    })).json()
+
+    const browserGet = await fetch(`${harness.origin}${launch.selectionUrl}`)
+    assert.equal(browserGet.status, 200, 'same-origin browser GET may legitimately omit Origin')
+
+    const mappedLoopback = await dispatchControllerRequest(
+      harness.controller,
+      launch.selectionUrl,
+      'GET',
+      harness.origin,
+      '::ffff:127.42.3.9',
+    )
+    assert.equal(mappedLoopback.statusCode, 200)
+
+    const remote = await dispatchControllerRequest(
+      harness.controller,
+      launch.selectionUrl,
+      'GET',
+      harness.origin,
+      '198.51.100.19',
+    )
+    assert.equal(remote.statusCode, 403, 'opaque session id is not sufficient for a remote network peer')
+    assert.match(JSON.parse(remote.body).error, /loopback network peer/)
+  } finally {
+    await harness.cleanup()
+  }
+})
 
 test('concurrent launch requests serialize and stale cleanup cannot close the successor', async () => {
   const harness = await createHarness(120)

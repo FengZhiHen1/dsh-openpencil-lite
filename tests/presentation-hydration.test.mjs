@@ -1,0 +1,546 @@
+import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
+import { createServer, request as httpRequest } from 'node:http'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { test } from 'node:test'
+
+import {
+  PRESENTATION_HYDRATION_ROUTE,
+  PresentationHydrationController,
+  parseHydratableRenderResult,
+} from '../lib/presentation-hydration.js'
+import {
+  RenderAccessController,
+  renderDir,
+  snapshotDir,
+} from '../lib/renderer.js'
+
+const IMAGE_SHA = 'a'.repeat(64)
+const DOCUMENT_SHA = 'b'.repeat(64)
+
+function closeServer(server) {
+  return new Promise(resolve => server.close(resolve))
+}
+
+function renderResult(overrides = {}) {
+  const filename = 'render-00000000-0000-4000-8000-000000000001.png'
+  const path = join(renderDir(), filename)
+  const documentFilename = `${DOCUMENT_SHA}.op`
+  return {
+    path,
+    filename,
+    mimeType: 'image/png',
+    kind: 'image',
+    description: 'Rendered /tmp/design.op with openpencil (exact)',
+    sourceTool: 'openpencil_render',
+    previewIntent: 'image',
+    bytes: 1234,
+    width: 375,
+    height: 800,
+    sha256: IMAGE_SHA,
+    sourcePath: '/tmp/design.op',
+    renderer: 'openpencil',
+    rendererBinary: '/Applications/OpenPencil.app/Contents/MacOS/openpencil-desktop',
+    fidelity: 'exact',
+    warnings: [],
+    frames: [{
+      path,
+      filename,
+      mimeType: 'image/png',
+      bytes: 1234,
+      width: 375,
+      height: 800,
+      sha256: IMAGE_SHA,
+      id: 'frame-1',
+      name: 'Home',
+      index: 0,
+    }],
+    frameCount: 1,
+    editable: true,
+    document: {
+      path: join(snapshotDir(), documentFilename),
+      filename: documentFilename,
+      mimeType: 'application/json',
+      bytes: 4567,
+      sha256: DOCUMENT_SHA,
+    },
+    ...overrides,
+  }
+}
+
+function historicalEvent(callId, result, content) {
+  return {
+    type: 'tool/code-dispatch',
+    data: {
+      rootCallId: 'outer',
+      parentCallId: 'outer',
+      subCallId: callId,
+      name: 'openpencil_render',
+      arguments: { path: '/tmp/design.op' },
+      isError: false,
+      content: content ?? [{ type: 'text', text: JSON.stringify(result) }],
+    },
+  }
+}
+
+async function createHarness({
+  sessions = new Map(),
+  now,
+  ttlMs,
+  maxEntries,
+  maxRecordBytes,
+  maxBytes,
+  trustedHosts,
+  remoteAddress,
+} = {}) {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-openpencil-presentation-'))
+  const previousDshHome = process.env.DSH_HOME
+  process.env.DSH_HOME = join(root, 'dsh-home')
+  const render = new RenderAccessController(randomBytes(32))
+  const detachRender = render.attachRoute()
+  const editorCalls = []
+  const hydration = new PresentationHydrationController({
+    sessions: { get(id) { return sessions.get(String(id)) } },
+    render,
+    viewer: {
+      viewerGrant: {
+        sdkUrl: '/_dsh/dsh-openpencil/viewer-assets/revision/sdk.js',
+        wasmUrl: '/_dsh/dsh-openpencil/viewer-assets/revision/op_web_sdk_bg.wasm',
+        canvasKitBaseUrl: '/_dsh/dsh-openpencil/viewer-assets/revision/canvaskit/',
+      },
+    },
+    editor: {
+      grantFor(sourcePath, sourceSha256) {
+        editorCalls.push({ sourcePath, sourceSha256 })
+        return {
+          enabled: true,
+          launchUrl: '/_dsh/dsh-openpencil/editor/live/launch',
+          refreshUrl: '/_dsh/dsh-openpencil/editor/live/refresh',
+        }
+      },
+    },
+    trustedHosts,
+  }, { now, ttlMs, maxEntries, maxRecordBytes, maxBytes })
+
+  const server = createServer((req, res) => {
+    if (remoteAddress !== undefined) {
+      Object.defineProperty(req.socket, 'remoteAddress', { configurable: true, value: remoteAddress })
+    }
+    void hydration.handle(req, res)
+  })
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  const address = server.address()
+  assert.equal(typeof address, 'object')
+  const origin = `http://127.0.0.1:${address.port}`
+  const request = (body, init = {}) => fetch(`${origin}${init.path ?? PRESENTATION_HYDRATION_ROUTE}`, {
+    method: init.method ?? 'POST',
+    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: {
+      ...(init.origin === false ? {} : { origin: init.origin ?? origin }),
+      ...(body === undefined ? {} : { 'content-type': init.contentType ?? 'application/json' }),
+      ...(init.headers ?? {}),
+    },
+  })
+  const authorityRequest = (body, authority, init = {}) => new Promise((resolve, reject) => {
+    const encoded = JSON.stringify(body)
+    const headers = {
+      host: authority,
+      ...(init.origin === false ? {} : { origin: init.origin ?? `http://${authority}` }),
+      'content-type': 'application/json',
+      'content-length': String(Buffer.byteLength(encoded)),
+      ...(init.headers ?? {}),
+    }
+    const outgoing = httpRequest({
+      hostname: '127.0.0.1',
+      port: address.port,
+      path: PRESENTATION_HYDRATION_ROUTE,
+      method: 'POST',
+      headers,
+    }, response => {
+      const chunks = []
+      response.on('data', chunk => chunks.push(Buffer.from(chunk)))
+      response.on('end', () => resolve({
+        status: response.statusCode,
+        body: Buffer.concat(chunks).toString('utf8'),
+      }))
+    })
+    outgoing.once('error', reject)
+    outgoing.end(encoded)
+  })
+
+  return {
+    hydration,
+    editorCalls,
+    request,
+    authorityRequest,
+    result: renderResult(),
+    origin,
+    async cleanup() {
+      detachRender()
+      await closeServer(server)
+      if (previousDshHome === undefined) delete process.env.DSH_HOME
+      else process.env.DSH_HOME = previousDshHome
+      await rm(root, { recursive: true, force: true })
+    },
+  }
+}
+
+function observe(hydration, sessionId, callId, result) {
+  hydration.observeToolResult({
+    name: 'openpencil_render',
+    callId,
+    parent: Symbol('run-code'),
+    agent: { id: sessionId, session: { id: sessionId } },
+  }, { isError: false, value: result, content: [] })
+}
+
+test('live nested results hydrate only the presentation envelope and may restore editing', async () => {
+  const sessions = new Map()
+  const harness = await createHarness({ sessions, trustedHosts: ['example.test'] })
+  try {
+    observe(harness.hydration, 'session-live', 'outer:code:1', harness.result)
+    sessions.set('session-live', { events: [historicalEvent('outer:code:1', harness.result)] })
+    const response = await harness.request({
+      sessionId: 'session-live',
+      callId: 'outer:code:1',
+      documentSha256: DOCUMENT_SHA,
+    })
+    assert.equal(response.status, 200)
+    assert.match(response.headers.get('cache-control') ?? '', /no-store/)
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff')
+    const body = await response.json()
+    assert.deepEqual(Object.keys(body), ['$dshOpenPencil'])
+    assert.equal(body.$dshOpenPencil.schemaVersion, 2)
+    assert.match(body.$dshOpenPencil.image.previewUrl, /^\/_dsh\/dsh-openpencil\/render\//)
+    assert.equal(body.$dshOpenPencil.frames.length, 1)
+    assert.equal(body.$dshOpenPencil.document.path, '/tmp/design.op')
+    assert.equal(body.$dshOpenPencil.viewer.sdkUrl, '/_dsh/dsh-openpencil/viewer-assets/revision/sdk.js')
+    assert.equal(body.$dshOpenPencil.editor.launchUrl, '/_dsh/dsh-openpencil/editor/live/launch')
+    assert.deepEqual(harness.editorCalls, [{ sourcePath: '/tmp/design.op', sourceSha256: DOCUMENT_SHA }])
+
+    observe(harness.hydration, 'session-remote', 'outer:code:2', harness.result)
+    sessions.set('session-remote', { events: [historicalEvent('outer:code:2', harness.result)] })
+    const remoteHost = `example.test:${new URL(harness.origin).port}`
+    const remote = await harness.authorityRequest({
+      sessionId: 'session-remote',
+      callId: 'outer:code:2',
+      documentSha256: DOCUMENT_SHA,
+    }, remoteHost)
+    assert.equal(remote.status, 200)
+    assert.equal('editor' in JSON.parse(remote.body).$dshOpenPencil, false, 'non-loopback origins must never receive editor grants')
+    assert.equal(harness.editorCalls.length, 1)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('editor authorization requires a nested observer and an exact durable result match', async () => {
+  const sessions = new Map()
+  const harness = await createHarness({ sessions })
+  try {
+    const requestFor = (sessionId, callId) => ({ sessionId, callId, documentSha256: DOCUMENT_SHA })
+
+    harness.hydration.observeToolResult({
+      name: 'openpencil_render',
+      callId: 'root-call',
+      agent: { id: 'session-root', session: { id: 'session-root' } },
+    }, { isError: false, value: harness.result, content: [] })
+    sessions.set('session-root', { events: [historicalEvent('root-call', harness.result)] })
+    const root = await harness.request(requestFor('session-root', 'root-call'))
+    assert.equal(root.status, 200)
+    assert.equal('editor' in (await root.json()).$dshOpenPencil, false, 'root tool observations must not authorize Code Mode hydration')
+
+    const live = renderResult({ sourcePath: '/tmp/live.op' })
+    observe(harness.hydration, 'session-mismatch', 'outer:code:mismatch', live)
+    sessions.set('session-mismatch', { events: [historicalEvent('outer:code:mismatch', harness.result)] })
+    const mismatch = await harness.request(requestFor('session-mismatch', 'outer:code:mismatch'))
+    assert.equal(mismatch.status, 200)
+    assert.equal('editor' in (await mismatch.json()).$dshOpenPencil, false, 'a non-matching durable result may preview but cannot receive editor capability')
+
+    observe(harness.hydration, 'session-top-level-noise', 'outer:code:stable', harness.result)
+    harness.hydration.observeToolResult({
+      name: 'openpencil_render',
+      callId: 'outer:code:stable',
+      agent: { id: 'session-top-level-noise', session: { id: 'session-top-level-noise' } },
+    }, { isError: false, value: renderResult({ sourcePath: '/tmp/top-level-noise.op' }), content: [] })
+    sessions.set('session-top-level-noise', { events: [historicalEvent('outer:code:stable', harness.result)] })
+    const unaffected = await harness.request(requestFor('session-top-level-noise', 'outer:code:stable'))
+    assert.equal('editor' in (await unaffected.json()).$dshOpenPencil, true, 'a top-level result with the same call id must not evict nested authorization')
+
+    observe(harness.hydration, 'session-unsettled', 'outer:code:unsettled', harness.result)
+    assert.equal((await harness.request(requestFor('session-unsettled', 'outer:code:unsettled'))).status, 404, 'an unpersisted live observation is never a preview authority')
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('editor capability also requires the actual peer socket to be loopback', async () => {
+  const sessions = new Map()
+  const harness = await createHarness({ sessions, remoteAddress: '192.0.2.44' })
+  try {
+    const sessionId = 'session-spoofed-loopback'
+    const callId = 'outer:code:socket'
+    observe(harness.hydration, sessionId, callId, harness.result)
+    sessions.set(sessionId, { events: [historicalEvent(callId, harness.result)] })
+    const response = await harness.request({ sessionId, callId, documentSha256: DOCUMENT_SHA })
+    assert.equal(response.status, 200, 'a remote peer may still receive its authorized preview')
+    assert.equal('editor' in (await response.json()).$dshOpenPencil, false, 'spoofed loopback Host and Origin must not mint editor capability')
+    assert.deepEqual(harness.editorCalls, [])
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('IPv4-mapped 127/8 peers are treated as loopback for editor capability', async () => {
+  const sessions = new Map()
+  const harness = await createHarness({ sessions, remoteAddress: '::ffff:127.23.4.5' })
+  try {
+    const sessionId = 'session-mapped-loopback'
+    const callId = 'outer:code:mapped'
+    observe(harness.hydration, sessionId, callId, harness.result)
+    sessions.set(sessionId, { events: [historicalEvent(callId, harness.result)] })
+    const response = await harness.request({ sessionId, callId, documentSha256: DOCUMENT_SHA })
+    assert.equal(response.status, 200)
+    assert.equal('editor' in (await response.json()).$dshOpenPencil, true)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('durable Code Mode fallback is strict and never issues an editor grant', async () => {
+  const sessions = new Map()
+  const harness = await createHarness({ sessions })
+  try {
+    sessions.set('session-history', { events: [historicalEvent('outer:code:2', harness.result)] })
+    const response = await harness.request({
+      sessionId: 'session-history',
+      callId: 'outer:code:2',
+      documentSha256: DOCUMENT_SHA,
+    })
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    assert.equal(body.$dshOpenPencil.image.width, 375)
+    assert.equal('editor' in body.$dshOpenPencil, false)
+    assert.deepEqual(harness.editorCalls, [])
+
+    const offRoot = renderResult({ path: '/tmp/render-attacker.png' })
+    sessions.set('session-off-root', { events: [historicalEvent('outer:code:3', offRoot)] })
+    const rejected = await harness.request({
+      sessionId: 'session-off-root',
+      callId: 'outer:code:3',
+      documentSha256: DOCUMENT_SHA,
+    })
+    assert.equal(rejected.status, 404)
+    assert.equal(await rejected.text(), '')
+
+    sessions.set('session-multi', {
+      events: [historicalEvent('outer:code:4', harness.result, [
+        { type: 'text', text: JSON.stringify(harness.result) },
+        { type: 'text', text: '{}' },
+      ])],
+    })
+    const multi = await harness.request({
+      sessionId: 'session-multi',
+      callId: 'outer:code:4',
+      documentSha256: DOCUMENT_SHA,
+    })
+    assert.equal(multi.status, 404)
+
+    sessions.set('session-duplicate', {
+      events: [
+        historicalEvent('outer:code:5', harness.result),
+        historicalEvent('outer:code:5', harness.result),
+      ],
+    })
+    const duplicate = await harness.request({
+      sessionId: 'session-duplicate',
+      callId: 'outer:code:5',
+      documentSha256: DOCUMENT_SHA,
+    })
+    assert.equal(duplicate.status, 404, 'duplicate settlement identities must fail closed')
+
+    sessions.set('session-huge', {
+      events: [historicalEvent('outer:code:huge', harness.result, [
+        { type: 'text', text: ' '.repeat(16 * 1024 * 1024 + 1) },
+      ])],
+    })
+    const huge = await harness.request({
+      sessionId: 'session-huge',
+      callId: 'outer:code:huge',
+      documentSha256: DOCUMENT_SHA,
+    })
+    assert.equal(huge.status, 404, 'oversized durable text must be rejected before JSON parsing')
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('durable settlement index consumes only appended events and tombstones later duplicates', async () => {
+  const sessions = new Map()
+  const harness = await createHarness({ sessions })
+  try {
+    const callId = 'outer:code:indexed'
+    const events = Array.from({ length: 128 }, (_unused, index) => ({
+      type: 'unrelated',
+      data: { index },
+    }))
+    events.push(historicalEvent(callId, harness.result))
+    let indexedReads = 0
+    sessions.set('session-indexed', {
+      // Match the official Session contract: each append invalidates the
+      // immutable snapshot, so the next read returns a different array.
+      get events() {
+        return new Proxy(Object.freeze([...events]), {
+          get(target, property, receiver) {
+            if (/^\d+$/u.test(String(property))) indexedReads += 1
+            return Reflect.get(target, property, receiver)
+          },
+        })
+      },
+    })
+    const request = { sessionId: 'session-indexed', callId, documentSha256: DOCUMENT_SHA }
+    assert.equal((await harness.request(request)).status, 200)
+    const readsAfterInitialIndex = indexedReads
+    events.push({ type: 'unrelated', data: {} })
+    assert.equal((await harness.request(request)).status, 200, 'an unrelated suffix must preserve the unique settlement')
+    assert.ok(
+      indexedReads - readsAfterInitialIndex <= 3,
+      'a replaced immutable snapshot must scan only its appended suffix',
+    )
+    events.push(historicalEvent(callId, harness.result))
+    assert.equal((await harness.request(request)).status, 404, 'an appended second settlement must invalidate the cached parse and fail closed')
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('hydration route rejects cross-origin, malformed, mismatched, and non-POST requests', async () => {
+  const harness = await createHarness()
+  try {
+    observe(harness.hydration, 'session-safe', 'outer:code:5', harness.result)
+    const request = {
+      sessionId: 'session-safe',
+      callId: 'outer:code:5',
+      documentSha256: DOCUMENT_SHA,
+    }
+    assert.equal((await harness.request(request, { origin: 'https://attacker.example' })).status, 403)
+    assert.equal((await harness.request(request, { headers: { 'sec-fetch-site': 'cross-site' } })).status, 403)
+    const remoteHost = `example.test:${new URL(harness.origin).port}`
+    assert.equal((await harness.authorityRequest(request, remoteHost)).status, 403, 'an unconfigured Host must fail the DNS-rebinding fence')
+    assert.equal((await harness.request({ ...request, documentSha256: 'c'.repeat(64) })).status, 404)
+    assert.equal((await harness.request({ ...request, path: '/tmp/design.op' })).status, 400)
+    assert.equal((await harness.request(request, { contentType: 'text/plain' })).status, 415)
+    const oversizedLength = await harness.authorityRequest(request, new URL(harness.origin).host, {
+      headers: { 'content-length': '4097' },
+    })
+    assert.equal(oversizedLength.status, 413)
+    const get = await harness.request(undefined, { method: 'GET' })
+    assert.equal(get.status, 405)
+    assert.equal(get.headers.get('allow'), 'POST')
+    assert.equal((await harness.request(request, { path: `${PRESENTATION_HYDRATION_ROUTE}?x=1` })).status, 404)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('live hydration records are TTL-bound and LRU-capped', async () => {
+  let now = 1_000
+  const sessions = new Map()
+  const harness = await createHarness({ sessions, now: () => now, ttlMs: 10, maxEntries: 1 })
+  try {
+    observe(harness.hydration, 'session-a', 'outer:code:1', harness.result)
+    observe(harness.hydration, 'session-b', 'outer:code:1', harness.result)
+    sessions.set('session-a', { events: [historicalEvent('outer:code:1', harness.result)] })
+    sessions.set('session-b', { events: [historicalEvent('outer:code:1', harness.result)] })
+    const forId = sessionId => ({ sessionId, callId: 'outer:code:1', documentSha256: DOCUMENT_SHA })
+    const evicted = await harness.request(forId('session-a'))
+    assert.equal(evicted.status, 200, 'durable preview remains after the oldest authorization is evicted')
+    assert.equal('editor' in (await evicted.json()).$dshOpenPencil, false)
+    const retained = await harness.request(forId('session-b'))
+    assert.equal(retained.status, 200)
+    assert.equal('editor' in (await retained.json()).$dshOpenPencil, true)
+    now += 11
+    const expired = await harness.request(forId('session-b'))
+    assert.equal(expired.status, 200, 'expired authorization must fall back to durable preview')
+    assert.equal('editor' in (await expired.json()).$dshOpenPencil, false)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('duplicate live settlement identities are tombstoned instead of overwritten', async () => {
+  const sessions = new Map()
+  const harness = await createHarness({ sessions })
+  try {
+    const sessionId = 'session-duplicate-live'
+    const callId = 'outer:code:duplicate'
+    sessions.set(sessionId, { events: [historicalEvent(callId, harness.result)] })
+    observe(harness.hydration, sessionId, callId, harness.result)
+    observe(harness.hydration, sessionId, callId, renderResult({
+      sourcePath: '/tmp/different-source.op',
+      editable: false,
+    }))
+
+    const response = await harness.request({
+      sessionId,
+      callId,
+      documentSha256: DOCUMENT_SHA,
+    })
+    assert.equal(response.status, 404, 'a duplicate call id must block both live and historical fallback')
+    assert.deepEqual(harness.editorCalls, [])
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('live cache rejects oversized records and evicts deterministically by aggregate bytes', async () => {
+  const sessions = new Map()
+  const harness = await createHarness({
+    sessions,
+    maxEntries: 10,
+    maxRecordBytes: 1_024,
+    maxBytes: 600,
+  })
+  try {
+    const requestFor = sessionId => ({
+      sessionId,
+      callId: 'outer:code:bytes',
+      documentSha256: DOCUMENT_SHA,
+    })
+    const resultA = renderResult({ sourcePath: '/tmp/a.op' })
+    const resultB = renderResult({ sourcePath: '/tmp/b.op' })
+    const resultC = renderResult({ sourcePath: '/tmp/c.op' })
+    for (const [sessionId, result] of [['session-byte-a', resultA], ['session-byte-b', resultB]]) {
+      observe(harness.hydration, sessionId, 'outer:code:bytes', result)
+      sessions.set(sessionId, { events: [historicalEvent('outer:code:bytes', result)] })
+    }
+    const promoted = await harness.request(requestFor('session-byte-a'))
+    assert.equal('editor' in (await promoted.json()).$dshOpenPencil, true, 'reading an authorization must promote it in the LRU')
+    observe(harness.hydration, 'session-byte-c', 'outer:code:bytes', resultC)
+    sessions.set('session-byte-c', { events: [historicalEvent('outer:code:bytes', resultC)] })
+    const evicted = await harness.request(requestFor('session-byte-b'))
+    assert.equal('editor' in (await evicted.json()).$dshOpenPencil, false, 'aggregate byte pressure must evict the least-recently-used authorization')
+    assert.equal('editor' in (await (await harness.request(requestFor('session-byte-a'))).json()).$dshOpenPencil, true)
+    assert.equal('editor' in (await (await harness.request(requestFor('session-byte-c'))).json()).$dshOpenPencil, true)
+
+    const oversized = renderResult({ sourcePath: `/tmp/${'x'.repeat(2_000)}.op` })
+    observe(harness.hydration, 'session-byte-oversized', 'outer:code:bytes', oversized)
+    sessions.set('session-byte-oversized', { events: [historicalEvent('outer:code:bytes', oversized)] })
+    assert.equal((await harness.request(requestFor('session-byte-oversized'))).status, 404, 'an individually oversized record must become a fail-closed tombstone')
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test('strict parser refuses legacy path-only and presentation-bearing values', () => {
+  const result = renderResult()
+  assert.ok(parseHydratableRenderResult(result))
+  const { sha256: _sha256, ...withoutSha } = result
+  assert.equal(parseHydratableRenderResult(withoutSha), undefined)
+  assert.equal(parseHydratableRenderResult({ ...result, $dshOpenPencil: {} }), undefined)
+})

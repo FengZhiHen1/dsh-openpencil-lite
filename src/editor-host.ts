@@ -259,6 +259,36 @@ function requestOrigin(req: IncomingMessage): string {
   return url.origin
 }
 
+function isIpv4LoopbackAddress(address: string): boolean {
+  const parts = address.split('.')
+  return parts.length === 4
+    && parts[0] === '127'
+    && parts.every(part => /^\d{1,3}$/.test(part) && Number(part) <= 255)
+}
+
+/**
+ * Trust the transport peer, never forwarded or caller-controlled host data.
+ * Node may expose an IPv4 peer either directly or as an IPv4-mapped IPv6
+ * address, including the compact hexadecimal form used by some platforms.
+ */
+export function isLoopbackRemoteAddress(address: string | undefined): boolean {
+  if (address === undefined) return false
+  const normalized = address.toLowerCase().split('%', 1)[0]!
+  if (normalized === '::1' || isIpv4LoopbackAddress(normalized)) return true
+  if (!normalized.startsWith('::ffff:')) return false
+  const mapped = normalized.slice('::ffff:'.length)
+  if (isIpv4LoopbackAddress(mapped)) return true
+  const hexadecimal = /^([a-f0-9]{1,4}):([a-f0-9]{1,4})$/.exec(mapped)
+  if (hexadecimal === null) return false
+  return (Number.parseInt(hexadecimal[1]!, 16) >>> 8) === 127
+}
+
+function requireLoopbackPeer(req: IncomingMessage): void {
+  if (!isLoopbackRemoteAddress(req.socket?.remoteAddress)) {
+    throw new HttpError(403, 'editable OpenPencil sessions require a loopback network peer')
+  }
+}
+
 class HttpError extends Error {
   constructor(readonly status: number, message: string) {
     super(message)
@@ -480,6 +510,11 @@ export class EditorHostController {
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     try {
       this.#prune()
+      // Host and Origin are caller-controlled HTTP data. Apply the transport
+      // fence before resolving any bearer capability or session identifier so
+      // a LAN client cannot spoof localhost to launch, refresh, read, mutate,
+      // recover, or close a managed editor session.
+      requireLoopbackPeer(req)
       const url = new URL(req.url ?? '/', 'http://dsh.invalid')
       const launch = new RegExp(`^${EDITOR_ROUTE_PREFIX}/([A-Za-z0-9_.-]+)/launch$`).exec(url.pathname)
       const refresh = new RegExp(`^${EDITOR_ROUTE_PREFIX}/([A-Za-z0-9_.-]+)/refresh$`).exec(url.pathname)
