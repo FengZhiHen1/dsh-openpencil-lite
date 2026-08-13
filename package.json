@@ -38,8 +38,9 @@
     "src",
     "scripts",
     "cordis.patch.yml",
-    "README.md",
+    "README.*.md",
     "docs/images/dsh-openpencil-overview.png",
+    "docs/images/dsh-openpencil-logo.png",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"
   ],

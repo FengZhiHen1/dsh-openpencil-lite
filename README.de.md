@@ -1,0 +1,268 @@
+<p align="center">
+  <img src="./docs/images/dsh-openpencil-logo.png" alt="DSH OpenPencil" width="120" />
+</p>
+
+<h1 align="center">DSH OpenPencil</h1>
+
+<p align="center">
+  <strong>Das DeepSeek-Harness-Plugin für OpenPencil – echte <code>.op</code>-Dokumente direkt in einer Unterhaltung anzeigen, untersuchen und bearbeiten.</strong><br />
+  <sub>Exakte Multi-Frame-Vorschauen &bull; Interaktive Leinwand &bull; Verwalteter Editor &bull; Agent-native Design-Tools</sub>
+</p>
+
+<p align="center">
+  <sub>npm: <a href="https://www.npmjs.com/package/@zseven-w/dsh-openpencil"><code>@zseven-w/dsh-openpencil</code></a> · Aktuelle Plugin-Version: <code>0.1.0-rc.1</code> · Getestet mit DSH <code>0.1.0-rc.6</code></sub>
+</p>
+
+<p align="center">
+  <a href="./README.md">English</a> · <a href="./README.zh.md">简体中文</a> · <a href="./README.zh-TW.md">繁體中文</a> · <a href="./README.ja.md">日本語</a> · <a href="./README.ko.md">한국어</a> · <a href="./README.fr.md">Français</a> · <a href="./README.es.md">Español</a> · <a href="./README.de.md"><b>Deutsch</b></a> · <a href="./README.pt.md">Português</a> · <a href="./README.ru.md">Русский</a> · <a href="./README.hi.md">हिन्दी</a> · <a href="./README.tr.md">Türkçe</a> · <a href="./README.th.md">ไทย</a> · <a href="./README.vi.md">Tiếng Việt</a> · <a href="./README.id.md">Bahasa Indonesia</a>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@zseven-w/dsh-openpencil"><img src="https://img.shields.io/npm/v/%40zseven-w%2Fdsh-openpencil?style=flat&color=cfb537" alt="npm" /></a>
+  <a href="https://github.com/ZSeven-W/dsh-openpencil/stargazers"><img src="https://img.shields.io/github/stars/ZSeven-W/dsh-openpencil?style=flat&color=cfb537" alt="Stars" /></a>
+  <a href="https://github.com/ZSeven-W/dsh-openpencil/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ZSeven-W/dsh-openpencil?color=64748b" alt="License" /></a>
+  <a href="https://discord.gg/h9Fmyy6pVh"><img src="https://img.shields.io/badge/Discord-Join%20chat-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
+</p>
+
+<br />
+
+<p align="center">
+  <img src="./docs/images/dsh-openpencil-overview.png" alt="DSH OpenPencil – Multi-Frame-Vorschau und Seitenleisten-Editor" width="100%" />
+</p>
+<p align="center"><sub>Exakte Multi-Frame-<code>.op</code>-Vorschauen mit einer interaktiven Leinwand und dem Arbeitsbereich des verwalteten Editors</sub></p>
+
+## Warum DSH OpenPencil
+
+DSH OpenPencil verbindet [DeepSeek Harness](https://github.com/deepseek-ai/DSH) mit [OpenPencil](https://github.com/ZSeven-W/openpencil), sodass ein Agent eine echte, bearbeitbare, interaktive Design-Leinwand steuert, statt ein generiertes Bild zurückzugeben.
+
+<table>
+<tr>
+<td width="50%">
+
+### 🖼️ Exakte Multi-Frame-Vorschauen
+
+Der installierte Headless-Exporter von OpenPencil rendert designgetreue Vorschauen: den ersten Frame der obersten Ebene als großes, replaysicheres PNG sowie eine horizontal scrollbare Miniaturbildleiste mit Auswählen per Klick und Zurück-/Weiter-Navigation für Dokumente mit mehreren Frames.
+
+</td>
+<td width="50%">
+
+### 🗺️ Interaktive Leinwand
+
+„Interaktive Leinwand öffnen“ lädt die schreibgeschützte OpenPencil-Web-SDK bei Bedarf nach und bietet Schwenken, Zoomen und Einpassen – beliebige Seiten, verschachtelte Knoten oder inaktive Seiten lassen sich untersuchen, ohne die Unterhaltung zu verlassen.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### ✏️ Verwalteter Editor
+
+Mit `editable: true` öffnet die Bearbeiten-Aktion den verwalteten OpenPencil-Editor – Auswahl, Ebenen, Eigenschaften, Zeichenwerkzeuge, Rückgängig/Wiederholen und explizite Speichersemantik – in einem in der Größe veränderbaren Arbeitsbereich auf der rechten Seite mit Vollbild-Option.
+
+</td>
+<td width="50%">
+
+### 🤖 Agent-native Design-Tools
+
+Fünf Tools – `openpencil_new`, `openpencil_create`, `openpencil_edit`, `openpencil_render`, `openpencil_selection` – ermöglichen es dem Agenten, über transaktionale `batch_design`-Programme eine echte Leinwand zu erstellen, zu verändern und zu lesen.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🔐 Durch Capabilities geschützte Grants
+
+Bild- und Dokument-Grants sind signierte, an Hashes gebundene Capabilities. Browser-Metadaten legen niemals einen beliebigen Host-Pfad offen, und signierte Vorschau-/Editor-Capabilities gelangen nie in das kanonische Tool-Ergebnis oder den Modellkontext.
+
+</td>
+<td width="50%">
+
+### ⚡ Transaktionale Sicherheit
+
+Ein neues Dokument wird erst veröffentlicht, nachdem das gesamte `batch_design`-Programm erfolgreich abgeschlossen wurde. Das Tool überschreibt niemals einen vorhandenen Pfad, ein fehlgeschlagener Batch hinterlässt keine leere Datei, und Speichervorgänge verwenden einen optimistischen Hash mit atomarem Ersetzen.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🌍 Übernimmt das Look & Feel von DSH
+
+Die Tool-Karte und der verwaltete Editor übernehmen das Chinesisch-/Englisch-Locale und das Hell-/Dunkel-Design von DSH, ohne die Bearbeitungssitzung neu zu laden.
+
+</td>
+<td width="50%">
+
+### 🎯 Ein vollständiger Workflow
+
+„Anforderung in der Unterhaltung → Agent bearbeitet die echte Leinwand → Live-Vorschau und Interaktionsvalidierung → weiter iterieren“ – eine Schleife, keine Screenshot-Roundtrips.
+
+</td>
+</tr>
+</table>
+
+## Installation in DSH
+
+Installieren Sie das öffentliche Plugin in eine authentifizierte DSH-Prerelease, ohne DSH global zu installieren:
+
+```sh
+npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
+  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+```
+
+> Das OpenPencil-Plugin ist öffentlich und benötigt kein npm-Token. Wenn die DSH-Prerelease selbst eine Registry-Authentifizierung erfordert, bewahren Sie diese Anmeldedaten in einer npm-Konfiguration auf Benutzer- oder temporärer Ebene außerhalb des Checkouts auf. Dieses Repository enthält bewusst keine Registry-Anmeldedaten.
+
+## Design-Tools
+
+| Tool | Funktion |
+| --- | --- |
+| `openpencil_new` | Erstellt ein brandneues `.op` aus einem einzigen transaktionalen `batch_design`-Programm, speichert es atomar über das Sandbox-Dateisystem von DSH und benötigt keinen zuvor geöffneten Editor. |
+| `openpencil_create` | Wendet ein transaktionales `batch_design`-Programm an, um Knoten auf einer vorhandenen Live-Leinwand zu erzeugen oder umzustrukturieren. |
+| `openpencil_edit` | Modifiziert einen expliziten Knoten oder den einzelnen vom Benutzer ausgewählten Knoten. |
+| `openpencil_render` | Erstellt einen unveränderlichen, inhaltsadressierten `.op`-Snapshot und rendert jeden Frame der obersten Ebene auf der aktiven Seite – optional mit `scale` und `editable`. |
+| `openpencil_selection` | Liest die exakt auf der Leinwand des Live-Editors ausgewählten Knoten. |
+
+## Agent-Design-Workflow
+
+Für eine Anfrage in natürlicher Sprache ohne vorhandenes Dokument sollte der Agent `openpencil_new` mit einem neuen arbeitsbereichsrelativen `.op`-Pfad und dem ersten vollständigen `batch_design`-Programm aufrufen. Das Tool führt dieses Programm in einem privaten, verwalteten OpenPencil-Daemon aus und veröffentlicht das maßgebliche Dokument erst, nachdem der gesamte Batch erfolgreich war. Es überschreibt niemals einen vorhandenen Pfad, und ein fehlgeschlagener Batch hinterlässt keine leere Datei. Der Agent sollte anschließend `openpencil_render` mit dem zurückgegebenen Pfad, `editable: true` und `autoOpen: true` aufrufen, um die Galerie zu präsentieren und den Editor einmal aufzuklappen. Wiedergegebene oder bereits anfänglich dargestellte Karten aus dem Verlauf öffnen sich nie automatisch.
+
+Verwenden Sie `openpencil_create` und `openpencil_edit` nur für eine vorhandene Live-Leinwand. Ihre Änderungen bleiben bis zur Aktion „Speichern“ im Editor ungespeichert.
+
+## Rendering-Vertrag
+
+`openpencil_render` akzeptiert einen `.op`-Pfad, ein optionales `scale` (`0 < scale <= 8`, Standard `1`) und ein optionales `editable` (Standard `false`). Lassen Sie `width` und `height` für den exakten OpenPencil-Pfad ungesetzt: Sie beschreiben einen Laufzeit-Viewport und keine Design-Exportabmessungen und werden nur vom Jian-Fallback mit geringerer Wiedergabetreue akzeptiert.
+
+Die Erkennung der OpenPencil-Binärdatei prüft in dieser Reihenfolge:
+
+1. `DSH_OPENPENCIL_BINARY` oder `DSH_OPENPENCIL_DESKTOP`
+2. `/Applications/OpenPencil.app/Contents/MacOS/openpencil-desktop`
+3. `~/Applications/OpenPencil.app/Contents/MacOS/openpencil-desktop`
+4. `openpencil-desktop` im `PATH`
+
+Die Fallback-Erkennung von Jian verwendet `DSH_OPENPENCIL_JIAN`, einen bekannten lokalen Release-Build, und anschließend `PATH`. Wenn die exakte OpenPencil-Binärdatei tatsächlich nicht verfügbar ist, kann Jian einen klar gekennzeichneten `runtime-preview`-Fallback erzeugen. Fehler des exakten Renderers, Timeouts und ungültige PNGs fallen nicht stillschweigend zurück.
+
+## Web-Viewer-Assets
+
+DSH liefert für ein Client-Plugin nur `client.js` aus; daher werden die OpenPencil-ESM-SDK, ihr WASM und CanvasKit als explizite Same-Origin-Assets bereitgestellt:
+
+```sh
+npm run sync:viewer-assets
+```
+
+Der Sync-Befehl verwendet standardmäßig ein benachbartes `../openpencil`-Checkout. Überschreiben Sie es mit `OPENPENCIL_ROOT` oder `--openpencil-root`. Ein vollständiges vorgefertigtes Asset-Verzeichnis kann mit `DSH_OPENPENCIL_VIEWER_SOURCE` ausgewählt werden. Die Suche zur Laufzeit kann mit `DSH_OPENPENCIL_VIEWER_ASSET_DIR` überschrieben werden.
+
+Viewer-Assets werden erst nachgeladen, nachdem der Benutzer die Leinwand geöffnet hat. Sind sie nicht vorhanden oder ungültig, bleibt die PNG-Vorschau verfügbar und es wird kein Leinwand-Button angezeigt.
+
+## Verwalteter Editor
+
+Bearbeitbare Sitzungen nutzen den verwalteten Web-Host von OpenPencil – dieselbe Architektur wie bei `op-vscode`. Das Plugin startet den Host erst nach einer autorisierten Benutzeraktion, hält das Daemon-Token im Arbeitsspeicher, validiert iframe-Quelle und -Origin und beendet den Prozess, wenn die Editor-Sitzung endet. Die Editor-Oberfläche wird schrittweise ausgewählt: native Tool-Details, wenn der Host diese Schnittstelle deklariert, andernfalls der rechtsseitige Arbeitsbereich des Plugins mit Größenänderung und Vollbild-Steuerung.
+
+Wenn DSH das Plugin neu lädt oder entlädt, während die Leinwand ungespeicherte Änderungen enthält, bewahrt der Host bis zu sieben Tage lang einen undurchsichtigen lokalen Wiederherstellungsentwurf auf. Beim erneuten Öffnen derselben Quelle wird nachgefragt, bevor sie in die Live-Leinwand wiederhergestellt wird; die Wiederherstellung überschreibt die `.op`-Datei nie, bis der Benutzer explizit speichert.
+
+Die Erkennung von Binärdatei und Quelle kann überschrieben werden mit:
+
+- `DSH_OPENPENCIL_EDITOR_BINARY` für `op-host-web-server`;
+- `DSH_OPENPENCIL_SOURCE_ROOT` (oder `OPENPENCIL_SOURCE_ROOT`) für das Web-Bundle und die CanvasKit-Assets.
+
+Speichervorgänge nutzen einen optimistischen Quell-Hash, ein atomares Ersetzen und eine Nachfolger-Capability. Wenn sich die Quelle außerhalb des Editors ändert, meldet das Plugin einen Konflikt, statt sie zu überschreiben.
+
+## Ergebnis-Metadaten
+
+Das für das Modell sichtbare Ergebnis bleibt einfaches JSON. Das nur im Browser verfügbare `presentationMeta.$dshOpenPencil` enthält additive Grants für:
+
+- `image`: PNG-Pfad, Vorschau-/Download-URLs und echte Breite/Höhe;
+- `frames`: jeder exakt gerenderte Frame der obersten Ebene in der Reihenfolge der aktiven Seite, einschließlich Knoten-ID/-Name/-Index und signierter PNG-URLs;
+- `document`: Quell-Aktionspfad plus unveränderliche Snapshot-URL, Bytes und SHA-256;
+- `viewer`: versionierte SDK-/WASM-/CanvasKit-URLs, wenn die Asset-Route angehängt ist;
+- `editor`: eingeschränkte Start-/Aktualisierungs-Capabilities, wenn `editable: true` autorisiert ist.
+
+Das Ergebnis erfasst außerdem `renderer`, `rendererBinary`, `fidelity` und etwaige Warnungen. Vorhandene reine PNG-Schema-v1-Nachrichten bleiben renderbar.
+
+DSH `0.1.0-rc.6` speichert Browser-Präsentationsmetadaten für Tools, die unter PTC/Code Mode verschachtelt sind, nicht dauerhaft. Das Plugin stellt diese reine UI-Projektion über einen Same-Origin-, sitzungsgebundenen Endpunkt wieder her: Der Browser sendet nur die Sitzungs-ID, die Call-ID und den unveränderlichen Dokument-SHA-256, während der Host das maßgebliche Ergebnis aus dem dauerhaften DSH-Sitzungsprotokoll auflöst und einen kurzlebigen In-Process-Marker ausschließlich zur Autorisierung aktueller Live-Bearbeitungen verwendet. Signierte Vorschau-/Editor-Capabilities gelangen nie in das kanonische Tool-Ergebnis oder den Modellkontext. Der dauerhafte Verlauf kann schreibgeschützte Vorschauen wiederherstellen; Editor-Grants werden nur für aktuelle, vertrauenswürdige Live-Ergebnisse ausgestellt.
+
+Für eine begrenzte Wiedergabe akzeptiert die verschachtelte Metadaten-Wiederherstellung bis zu 128 Frames der obersten Ebene; größere Code-Mode-Ergebnisse bleiben über ihren kanonischen JSON-Fallback verfügbar.
+
+## Aktuelle Einschränkungen
+
+- Folgeänderungen an einer vorhandenen Leinwand setzen einen bereits geöffneten verwalteten Editor voraus. Änderungen bleiben ungespeichert, bis der Benutzer dessen Aktion „Speichern“ ausführt.
+- Die leichtgewichtige Leinwand der Web-SDK ist schreibgeschützt; die vollständige Bearbeitung nutzt die separate Oberfläche des verwalteten Editors. Auf DSH `0.1.0-rc.6` verwendet das Plugin den in der Größe veränderbaren rechten Arbeitsbereich mit Vollbild-Option.
+- Die exakte Galerie umfasst Frames der obersten Ebene auf der aktiven Seite; die interaktive Leinwand bleibt der Weg, um inaktive Seiten und verschachtelte Knoten zu untersuchen.
+- Render- und Snapshot-Caches benötigen weiterhin eine produktweite Aufbewahrungsrichtlinie.
+
+## Projektstruktur
+
+```text
+dsh-openpencil/
+├── src/                       Plugin sources (TypeScript)
+│   ├── index.ts               Host plugin entry — Cordis service, tools, assets
+│   ├── tool.ts / design-tools.ts / new-tool.ts   Host-side design tools
+│   ├── renderer.ts            Exact OpenPencil renderer + Jian fallback
+│   ├── editor-host.ts / editor-recovery.ts       Managed editor lifecycle + drafts
+│   ├── viewer-assets.ts       Web SDK / WASM / CanvasKit asset staging
+│   ├── mcp-client.ts          OpenPencil MCP connection
+│   └── client/                Browser client — React workbench, gallery, selection dock
+├── lib/                       Compiled output (published to npm)
+├── scripts/                   Build helpers — viewer asset sync, client build, host tests
+├── tests/                     Node test suites (client, host API, MCP, viewer assets)
+├── docs/images/               Documentation screenshots
+├── cordis.patch.yml           DSH bundle patch that mounts the plugin
+├── tsconfig.json              Host / Node TypeScript config
+└── tsconfig.client.json       Browser client TypeScript config
+```
+
+## Build und Verifizieren
+
+```sh
+npm run sync:viewer-assets
+npm run build
+npm run test:viewer-assets
+npm run test:client
+npm run test:host -- /absolute/path/to/design.op 375 1091
+```
+
+Builds erfordern Node 24.11 oder neuer. DSH-Host-/Client-Pakete sind Peer-Abhängigkeiten, die vom Ziel-DSH-Profil bereitgestellt werden. Build-Tools werden aus lokalen Dev-Abhängigkeiten, dem aktiven verlinkten DSH-Checkout oder einem installierten DSH-Quellbundle aufgelöst; mit `DSH_SOURCE_ROOT` kann ein Quell-Checkout explizit ausgewählt werden. Die Lockfile pinnt eigenständige öffentliche Build-Tools, wenn diese Umgebung separat bereitgestellt wird.
+
+Für eine private DSH-Prerelease bewahren Sie die ausgegebene npm-Anmeldeinformation außerhalb dieses Repositorys auf (zum Beispiel in einer `.npmrc` auf Benutzer- oder temporärer Ebene) und führen Sie die angeforderte Version direkt aus:
+
+```sh
+npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+```
+
+Committen Sie niemals `.npmrc`, `NPM_TOKEN` oder kopierte Registry-Anmeldedaten. Dieses Repository ignoriert die lokale npm-Konfiguration standardmäßig.
+
+`test:host` führt einen echten exakten Render durch, validiert PNG-IHDR-Geometrie und SHA-256, testet unveränderliche Bild-/Dokument-Capabilities über HTTP und prüft, ob Viewer-Assets gewährbar sind. Die erwarteten Abmessungen sind fixture-spezifisch.
+
+## Ökosystem
+
+DSH OpenPencil ist das DeepSeek-Harness-Plugin für **[OpenPencil](https://github.com/ZSeven-W/openpencil)** – das weltweit erste quelloffene, AI-native Vektor-Design-Tool – und Teil der **[ZSeven-W](https://github.com/ZSeven-W)**-Familie reiner Rust- und AI-nativer Tools.
+
+| Projekt | Was es ist |
+| ------- | ---------- |
+| **[OpenPencil](https://github.com/ZSeven-W/openpencil)** | Das Design-Tool, das dieses Plugin steuert – Prompt-zu-Leinwand-Generierung, parallele Agent-Teams, Design-als-Code-`.op`-Dateien und ein integrierter MCP-Server. Die exakten Vorschauen, die interaktive Leinwand und der verwaltete Editor hier werden von OpenPencil selbst betrieben. |
+| **[agent-rs](https://github.com/ZSeven-W/agent-rs)** | Eine Async-Runtime aus reinem Rust für die Auslieferung von LLM-Agenten – Multi-Provider, durchgängig tool-fähig, strukturierte Berechtigungen, echtes MCP, null `unsafe`. Treibt die integrierte Agent-Runtime von OpenPencil an. |
+| **[jian](https://github.com/ZSeven-W/jian)** | Ein UI-Framework aus reinem Rust mit GPU-Skia – Widgets, Layout, Ereignisse und Hot Reload in einem Stack. OpenPencils UI-Framework und die Quelle des Fallback-Renderers dieses Plugins. |
+| **[Zode](https://github.com/ZSeven-W/zode)** | Ein quelloffener, AI-nativer Coding-Assistent für Ihr Terminal – liest Ihren Code, führt Befehle aus und steuert OpenPencil über MCP. |
+| **[noema](https://github.com/ZSeven-W/noema)** | Ein Local-first-, nicht-vektorbasiertes Speichersystem für Coding-Agenten – dauerhafter Speicher als einsehbare Dateien, funktioniert über Laufzeiten hinweg. |
+| **[openpencil-skill](https://github.com/ZSeven-W/openpencil-skill)** | Das LLM-Skill-Plugin, das KI-Agenten beibringt, wie sie mit `op` designen – ein Begleiter zu diesem DSH-Plugin. |
+
+## Mitwirken
+
+Beiträge sind willkommen! Forken und klonen Sie das Repository, erstellen Sie einen Branch, führen Sie `npm run build` und die Test-Suites aus, committen Sie mit [Conventional Commits](https://www.conventionalcommits.org/) und eröffnen Sie einen PR gegen `main`.
+
+## Community
+
+<a href="https://discord.gg/h9Fmyy6pVh">
+  <img src="https://raw.githubusercontent.com/ZSeven-W/openpencil/main/screenshot/logo-discord.svg" alt="Discord" width="16" />
+  <strong> Treten Sie unserem Discord bei</strong>
+</a>
+– Stellen Sie Fragen, teilen Sie Designs, schlagen Sie Funktionen vor.
+
+**Anerkannte Community: [LINUX DO](https://linux.do/)**
+
+## Lizenz
+
+[MIT](./LICENSE) — Copyright (c) 2026 ZSeven-W
+
+Komponenten von Drittanbietern sind in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) aufgeführt.
