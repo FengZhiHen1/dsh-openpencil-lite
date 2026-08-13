@@ -11,7 +11,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/dsh-external/dsh-openpencil.git"
+    "url": "git+ssh://git@github.com/ZSeven-W/dsh-openpencil.git"
   },
   "type": "module",
   "private": true,

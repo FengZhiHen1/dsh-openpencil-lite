@@ -37,7 +37,7 @@ The read-only Web SDK viewer and the managed editor are intentionally separate p
 Use an authenticated DSH prerelease without installing it globally:
 
 ```sh
-git clone git@github.com:dsh-external/dsh-openpencil.git
+git clone git@github.com:ZSeven-W/dsh-openpencil.git
 npx --yes -p @deepseek-ai/dsh@0.0.1-rc.5 \
   dsh plugin --profile web add /absolute/path/to/dsh-openpencil
 npx --yes -p @deepseek-ai/dsh@0.0.1-rc.5 dsh web
