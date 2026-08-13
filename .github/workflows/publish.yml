@@ -1,0 +1,50 @@
+name: Publish npm package
+
+# Triggered on a v* tag push — syncs the OpenPencil viewer assets, builds
+# the plugin, verifies the package.json version against the tag, and
+# publishes @zseven-w/dsh-openpencil to the public npm registry.
+#
+# Requires the repository secret:
+#   NPM_TOKEN   npm registry automation token for publishing (public registry)
+#
+# Prerelease versions (0.x.0-rc.*) publish under the `next` dist-tag, so
+# the `latest` tag is never silently moved by an rc release.
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    name: Build and publish @zseven-w/dsh-openpencil
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Clone OpenPencil checkout (viewer asset source)
+        run: git clone --depth 1 https://github.com/ZSeven-W/openpencil.git ../openpencil
+      - name: Sync viewer assets
+        run: npm run sync:viewer-assets
+      - name: Build
+        run: npm run build
+      - name: Verify package version matches tag
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$TAG" ]; then
+            echo "::error::package.json version $VERSION does not match tag $TAG"
+            exit 1
+          fi
+      - name: Configure npm auth
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > ~/.npmrc
+          npm whoami
+      - name: Publish npm package
+        run: npm publish --access public --tag next
