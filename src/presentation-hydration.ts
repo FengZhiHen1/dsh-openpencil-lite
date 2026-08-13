@@ -3,7 +3,7 @@
  * tool calls.
  *
  * DSH persists a nested `openpencil_render` outcome as a
- * `tool/code-dispatch` event, but rc.5 deliberately omits the native
+ * `tool/code-dispatch` event, but published DSH through 0.1.0-rc.6 omits the native
  * `tool/result` presentation metadata from that event. The browser can ask
  * this same-origin endpoint to re-project that metadata without submitting
  * any path or tool result of its own. Live results are remembered briefly so

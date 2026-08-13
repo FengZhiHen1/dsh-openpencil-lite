@@ -1,6 +1,6 @@
 {
-  "name": "@dsh-external/dsh-openpencil",
-  "version": "0.0.1",
+  "name": "@zseven-w/dsh-openpencil",
+  "version": "0.1.0-rc.1",
   "description": "OpenPencil plugin for DSH with exact multi-frame previews, an interactive canvas, and managed editor workbenches.",
   "license": "MIT",
   "keywords": [
@@ -11,10 +11,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/ZSeven-W/dsh-openpencil.git"
+    "url": "git+https://github.com/ZSeven-W/dsh-openpencil.git"
   },
   "type": "module",
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=24.11.0"
   },
@@ -37,6 +39,7 @@
     "scripts",
     "cordis.patch.yml",
     "README.md",
+    "docs/images/dsh-openpencil-overview.png",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md"
   ],
@@ -67,18 +70,18 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1-rc.1",
-    "@deepseek-ai/dsh-client-locale": "^0.0.1-rc.2",
-    "@deepseek-ai/dsh-client-runtime": "^0.0.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-conversation": "^0.0.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.0.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-theme": "^0.0.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-tool": "^0.0.1-rc.2",
-    "@deepseek-ai/dsh-fs": "^0.0.1-rc.2",
-    "@deepseek-ai/dsh-host-webserver": "^0.0.1-rc.2",
-    "@deepseek-ai/dsh-sandbox-policy": "^0.0.1-rc.2",
-    "@deepseek-ai/dsh-session": "^0.0.1-rc.2",
-    "@deepseek-ai/dsh-tools": "^0.0.1-rc.2",
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-theme": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-tool": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-host-webserver": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox-policy": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-session": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

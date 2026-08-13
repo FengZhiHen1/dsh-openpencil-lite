@@ -1,5 +1,5 @@
 /**
- * @dsh-external/dsh-openpencil — preview `.op` design documents in DSH.
+ * @zseven-w/dsh-openpencil — preview `.op` design documents in DSH.
  *
  * Plugin lifecycle: register the model-facing tool plus signed routes for
  * exact PNGs, immutable document snapshots, and the optional read-only Web
@@ -12,7 +12,7 @@
  * envelope rides `output.presentationMeta` into `ToolCallBlock.meta`, and
  * the keyed `tool.call.toolview` client component renders a PNG-first card
  * and lazily mounts the OpenPencil canvas on demand.
- * @module @dsh-external/dsh-openpencil
+ * @module @zseven-w/dsh-openpencil
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -67,7 +67,7 @@ export {
 } from './tool-names.js'
 
 /** Stable plugin name (the loader entry id in cordis.patch.yml). */
-export const name = '@dsh-external/dsh-openpencil'
+export const name = '@zseven-w/dsh-openpencil'
 
 /** Services this plugin's root fiber requires. */
 export const inject = ['tools', 'sessions', 'fs', 'sandboxPolicy']

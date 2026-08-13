@@ -3,16 +3,23 @@ import { createRequire } from 'node:module'
 import { test } from 'node:test'
 
 const require = createRequire(import.meta.url)
+const manifest = require('../package.json')
 let client
+let loadedPluginId
 globalThis.window = {
   location: { href: 'http://127.0.0.1:3080/' },
   __ModuleLoader__: {
     load(definition) {
+      loadedPluginId = definition.id
       client = definition.factory(require)
     },
   },
 }
 await import(`../lib/client.js?test=${Date.now()}`)
+
+test('registers the client bundle under the published package name', () => {
+  assert.equal(loadedPluginId, manifest.name)
+})
 
 function settled(meta) {
   return {

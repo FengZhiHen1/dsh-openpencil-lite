@@ -6,12 +6,16 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
-const PLUGIN_ID = '@dsh-external/dsh-openpencil'
+const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
+const pluginId = manifest.name
+if (typeof pluginId !== 'string' || pluginId.length === 0) {
+  throw new TypeError('package.json must declare a non-empty package name')
+}
 const compiledPath = join(root, '.client-build', 'index.cjs')
 const outputPath = join(root, 'lib', 'client.js')
 const source = await readFile(compiledPath, 'utf8')
 const wrapped = [
-  `window.__ModuleLoader__.load({ id: "${PLUGIN_ID}", factory: (require) => {`,
+  `window.__ModuleLoader__.load({ id: ${JSON.stringify(pluginId)}, factory: (require) => {`,
   'var module = { exports: {} }; var exports = module.exports;',
   source.replace(/\n?\/\/# sourceMappingURL=.*$/u, ''),
   'return module.exports; } });',
