@@ -3,12 +3,14 @@
 import { useSyncExternalStore } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { PresentationGrant, PresentationLocale } from './index.js'
-import { editorLocaleFromDsh, type EditorColorScheme } from './editor-bridge.js'
+import { editorLocaleFromDsh, hasActiveEditor, type EditorColorScheme } from './editor-bridge.js'
 import {
   editorModalCopy,
   editorWorkbenchEditorKey,
+  editorWorkbenchUsesFullscreen,
   ManagedOpenPencilEditorModal,
 } from './editor-modal.js'
+import { OPENPENCIL_WORKBENCH_DOCK_ATTRIBUTE } from './editor-dock-layout.js'
 import {
   INITIAL_EDITOR_LIFECYCLE_STATE,
   type EditorLifecycleController,
@@ -18,6 +20,7 @@ import {
 export interface EditorWorkbenchRequest {
   grant: PresentationGrant
   sessionId: string
+  automatic?: boolean
 }
 
 type Listener = () => void
@@ -79,6 +82,7 @@ interface EditorWorkbenchHostOptions {
 
 export interface EditorWorkbenchHost {
   open: (request: EditorWorkbenchRequest) => Promise<boolean>
+  openIfIdle: (request: EditorWorkbenchRequest) => Promise<boolean>
   dispose: () => Promise<void>
 }
 
@@ -144,6 +148,7 @@ function EditorWorkbenchHostView({
       onLifecycleState={onLifecycleState}
       onLifecycleController={onLifecycleController}
       onClose={close}
+      allowEditorTakeover={request.automatic !== true}
     />
   )
 }
@@ -228,6 +233,27 @@ export function mountEditorWorkbenchHost(options: EditorWorkbenchHostOptions): E
           lifecycle = INITIAL_EDITOR_LIFECYCLE_STATE
           lifecycleController = undefined
           queueMicrotask(focusSurface)
+        }
+        return accepted
+      })
+      openQueue = operation.then(() => {}, () => {})
+      return operation
+    },
+    openIfIdle(request) {
+      if (destroyed || disposing) return Promise.resolve(false)
+      const operation = openQueue.then((): boolean => {
+        if (destroyed || disposing || store.getSnapshot() !== undefined || hasActiveEditor()) return false
+        const viewportWidth = ownerDocument.defaultView?.innerWidth ?? window.innerWidth
+        if (editorWorkbenchUsesFullscreen(viewportWidth)) return false
+        const dshRoot = ownerDocument.getElementById('root')
+        if (dshRoot === null) return false
+        if (dshRoot.dataset[OPENPENCIL_WORKBENCH_DOCK_ATTRIBUTE] !== undefined) return false
+        const computedMarginRight = Number.parseFloat(ownerDocument.defaultView?.getComputedStyle(dshRoot).marginRight ?? '0')
+        if (dshRoot.style.marginRight.trim() !== '' || (Number.isFinite(computedMarginRight) && computedMarginRight > 0.5)) return false
+        const accepted = store.open({ ...request, automatic: true })
+        if (accepted) {
+          lifecycle = INITIAL_EDITOR_LIFECYCLE_STATE
+          lifecycleController = undefined
         }
         return accepted
       })

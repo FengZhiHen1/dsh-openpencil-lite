@@ -64,6 +64,8 @@ export interface DesignRenderArgs {
   scale?: number
   /** Explicitly expose the original source to the managed sidebar editor. */
   editable?: boolean
+  /** Expand the editor once on the live result card; intended for openpencil_new follow-ups. */
+  autoOpen?: boolean
 }
 
 /** Create the `openpencil_render` tool definition bound to one controller. */
@@ -79,7 +81,7 @@ export function createDesignRenderTool(
       + 'Give the absolute path to a .op file (or a path relative to the session workspace). '
       + 'For a new design when no .op file exists, call openpencil_new first. '
       + 'The image appears directly in the chat; the file path is returned for further use. '
-      + 'Set editable=true when the user asks for an editable design, and always for the immediate render after openpencil_new; no extra confirmation is needed. '
+      + 'Set editable=true when the user asks for an editable design. For the immediate render after openpencil_new, set editable=true and autoOpen=true; no extra confirmation is needed. '
       + 'Leave width/height unset for design-accurate output. Width/height are only supported '
       + 'by the lower-fidelity Jian runtime fallback.',
     parameters: {
@@ -88,6 +90,7 @@ export function createDesignRenderTool(
       height: { type: 'number', description: 'Explicit logical viewport height in pixels. Omit to use the document size.' },
       scale: { type: 'number', description: 'Pixel scale factor applied to the output (device-pixel ratio). Default 1.' },
       editable: { type: 'boolean', description: 'Expose an Edit in sidebar action for the original .op source. Default false.' },
+      autoOpen: { type: 'boolean', description: 'Automatically expand the editor once when this is the immediate render after openpencil_new. Default false.' },
     },
     output: {
       schema: {
@@ -131,6 +134,7 @@ export function createDesignRenderTool(
           },
           frameCount: { type: 'integer' },
           editable: { type: 'boolean' },
+          autoOpenEditor: { type: 'boolean' },
           document: {
             type: 'object',
             additionalProperties: false,
@@ -239,6 +243,7 @@ export function createDesignRenderTool(
         warnings,
         ...(frames === undefined ? {} : { frames, frameCount: frames.length }),
         editable: args.editable === true,
+        ...(args.editable === true && args.autoOpen === true ? { autoOpenEditor: true } : {}),
         document,
       }
       return result

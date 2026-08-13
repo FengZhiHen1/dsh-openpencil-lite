@@ -175,6 +175,7 @@ const RESULT_KEYS = new Set([
   'previewIntent', 'bytes', 'width', 'height', 'sha256', 'sourcePath',
   'renderer', 'rendererBinary', 'fidelity', 'warnings', 'frames',
   'frameCount', 'editable', 'document', 'note',
+  'autoOpenEditor',
 ])
 
 /**
@@ -203,6 +204,7 @@ export function parseHydratableRenderResult(value: unknown): RenderResult | unde
     || (value.rendererBinary !== undefined && !isSafeString(value.rendererBinary))
     || (value.fidelity !== undefined && value.fidelity !== 'exact' && value.fidelity !== 'runtime-preview')
     || (value.editable !== undefined && typeof value.editable !== 'boolean')
+    || (value.autoOpenEditor !== undefined && typeof value.autoOpenEditor !== 'boolean')
     || (value.note !== undefined && !isSafeString(value.note))
   ) return undefined
 

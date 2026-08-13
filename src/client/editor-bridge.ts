@@ -143,10 +143,21 @@ interface ActiveEditor {
 
 let activeEditor: ActiveEditor | undefined
 
+/** Read-only gate for background auto-open flows; never asks an owner to close. */
+export function hasActiveEditor(): boolean {
+  return activeEditor !== undefined
+}
+
 /** Page-wide single-editor coordinator. An existing dirty editor may veto takeover. */
-export function claimEditor(token: symbol, close: () => boolean | void): (() => void) | undefined {
+export function claimEditor(
+  token: symbol,
+  close: () => boolean | void,
+  options: { replace?: boolean } = {},
+): (() => void) | undefined {
   const previous = activeEditor
-  if (previous !== undefined && previous.token !== token && previous.close() === false) return undefined
+  if (previous !== undefined && previous.token !== token) {
+    if (options.replace === false || previous.close() === false) return undefined
+  }
   activeEditor = { token, close }
   return () => {
     if (activeEditor?.token === token) activeEditor = undefined

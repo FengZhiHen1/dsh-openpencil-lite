@@ -131,7 +131,7 @@ test('openpencil_new publishes one completed batch through guarded DSH filesyste
     applied: true,
     saved: true,
     result: { applied: true, inserted: 1 },
-    note: `Created and saved ${harness.processPath}. Call openpencil_render with this path and editable=true now.`,
+    note: `Created and saved ${harness.processPath}. Call openpencil_render with this path, editable=true, and autoOpen=true now.`,
   })
 })
 
@@ -299,4 +299,5 @@ test('openpencil_new exposes a strict creation schema and output contract', () =
   assert.match(decisionContract, /photo=G\(slot,"search","seasonal food photography"\)/)
   assert.match(decisionContract, /do not ask image-provider questions/i)
   assert.match(decisionContract, /openpencil_render.*editable=true/i)
+  assert.match(decisionContract, /autoOpen=true/i)
 })

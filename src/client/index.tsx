@@ -157,6 +157,43 @@ export {
 /** Presentation metadata key the host half projects into `block.meta`. */
 export const PRESENTATION_META_KEY = '$dshOpenPencil'
 
+const LIVE_AUTO_OPEN_TTL_MS = 15 * 60 * 1000
+const LIVE_AUTO_OPEN_MAX = 256
+const liveAutoOpenActivatedAt = Date.now()
+const liveAutoOpenCalls = new Map<string, number>()
+
+function liveAutoOpenKey(sessionId: string, callId: string): string {
+  return `${sessionId.length}:${sessionId}${callId}`
+}
+
+function pruneLiveAutoOpenCalls(now = Date.now()): void {
+  for (const [key, expiresAt] of liveAutoOpenCalls) {
+    if (expiresAt <= now) liveAutoOpenCalls.delete(key)
+  }
+  while (liveAutoOpenCalls.size > LIVE_AUTO_OPEN_MAX) {
+    const oldest = liveAutoOpenCalls.keys().next().value as string | undefined
+    if (oldest === undefined) break
+    liveAutoOpenCalls.delete(oldest)
+  }
+}
+
+function rememberLiveAutoOpenCall(key: string): void {
+  liveAutoOpenCalls.delete(key)
+  liveAutoOpenCalls.set(key, Date.now() + LIVE_AUTO_OPEN_TTL_MS)
+  pruneLiveAutoOpenCalls()
+}
+
+function takeLiveAutoOpenCall(key: string): boolean {
+  pruneLiveAutoOpenCalls()
+  if (!liveAutoOpenCalls.has(key)) return false
+  liveAutoOpenCalls.delete(key)
+  return true
+}
+
+function forgetLiveAutoOpenCall(key: string): void {
+  liveAutoOpenCalls.delete(key)
+}
+
 export type PresentationLocale = GalleryLocale
 
 const DESIGN_RENDER_COPY = {
@@ -268,6 +305,7 @@ export interface PresentationGrant {
   rendererBinary?: string
   fidelity?: string
   warnings?: string[]
+  autoOpenEditor?: boolean
 }
 
 function optionalString(record: Record<string, unknown>, key: string): string | undefined {
@@ -375,6 +413,7 @@ export function presentationGrantOfMeta(metaValue: unknown): PresentationGrant |
     rendererBinary: optionalString(envelope, 'rendererBinary'),
     fidelity: optionalString(envelope, 'fidelity'),
     warnings: optionalStrings(envelope, 'warnings'),
+    ...(envelope.autoOpenEditor === true ? { autoOpenEditor: true } : {}),
   }
 }
 
@@ -715,9 +754,11 @@ export function DesignRenderView({
   locale = 'en',
   sessionId,
   openEditorWorkbench,
+  autoOpenEditorWorkbench,
 }: CompatibleToolCallViewProps & {
   locale?: PresentationLocale
   openEditorWorkbench?: (request: EditorWorkbenchRequest) => boolean | Promise<boolean>
+  autoOpenEditorWorkbench?: (request: EditorWorkbenchRequest) => boolean | Promise<boolean>
 }) {
   const settled = 'kind' in block
   const error = settled && block.isError
@@ -748,6 +789,7 @@ export function DesignRenderView({
   const selectedFrame = frames[currentFrameIndex] ?? grant?.image
   const [modalToken, setModalToken] = useState<symbol>()
   const releaseRef = useRef<() => void>()
+  const liveAutoOpenCallKey = liveAutoOpenKey(String(sessionId), callId)
 
   useEffect(() => {
     if (hydrationKey === undefined || hydrationRequest === undefined) return
@@ -789,6 +831,23 @@ export function DesignRenderView({
       void openEditorWorkbench?.({ grant, sessionId: String(sessionId) })
     })
   }, [embeddedGrant, grant, openDetails, openEditorWorkbench, sessionId])
+
+  useEffect(() => {
+    if (running && block.time >= liveAutoOpenActivatedAt) rememberLiveAutoOpenCall(liveAutoOpenCallKey)
+    else if (error) forgetLiveAutoOpenCall(liveAutoOpenCallKey)
+  }, [error, liveAutoOpenCallKey, running])
+
+  useEffect(() => {
+    if (
+      running
+      || error
+      || grant?.autoOpenEditor !== true
+      || grant.editor?.enabled !== true
+      || autoOpenEditorWorkbench === undefined
+    ) return
+    if (!takeLiveAutoOpenCall(liveAutoOpenCallKey)) return
+    void autoOpenEditorWorkbench({ grant, sessionId: String(sessionId) })
+  }, [autoOpenEditorWorkbench, error, grant, liveAutoOpenCallKey, running, sessionId])
 
   useEffect(() => () => { releaseRef.current?.() }, [])
   useEffect(() => { setSelectedFrameIndex(0) }, [frames.map(frame => frame.previewUrl).join('\n')])
@@ -898,6 +957,7 @@ export function apply(ctx: ClientContext): void {
         {...props}
         locale={locale}
         openEditorWorkbench={request => editorWorkbenchHost?.open(request) ?? false}
+        autoOpenEditorWorkbench={request => editorWorkbenchHost?.openIfIdle(request) ?? false}
       />
     )
   }

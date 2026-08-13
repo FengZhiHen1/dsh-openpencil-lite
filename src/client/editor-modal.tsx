@@ -230,6 +230,7 @@ export function ManagedOpenPencilEditorModal({
   onLifecycleState,
   onLifecycleController,
   onClose,
+  allowEditorTakeover = true,
 }: {
   grant: PresentationGrant
   colorScheme: EditorColorScheme
@@ -239,6 +240,7 @@ export function ManagedOpenPencilEditorModal({
   onLifecycleState?: (state: EditorLifecycleState) => void
   onLifecycleController?: (controller: EditorLifecycleController | undefined) => void
   onClose: () => void
+  allowEditorTakeover?: boolean
 }) {
   const bodyRef = useRef<HTMLDivElement>(null)
   const surfaceRef = useRef<HTMLElement>(null)
@@ -561,6 +563,7 @@ export function ManagedOpenPencilEditorModal({
           onTakeoverRequest={requestTakeover}
           onLifecycleState={updateLifecycle}
           onLifecycleController={updateLifecycleController}
+          allowTakeover={allowEditorTakeover}
           workbenchActions={<>
             {!automaticFullscreen && !dockUnavailable ? (
               <button

@@ -54,7 +54,7 @@ export function createDesignNewTool(editorHost: EditorHostController, services: 
       + `For requested photography, add these valid lines in the same batch: ${IMAGE_OPERATION_EXAMPLE}. `
       + 'Use OpenPencil image search or an editable placeholder without pausing for external image-service setup; do not ask image-provider questions unless the user explicitly requested external generation. '
       + 'All operations apply together and the resulting document is saved atomically. '
-      + 'After success, immediately call openpencil_render with the returned path and editable=true to show and edit the result.',
+      + 'After success, immediately call openpencil_render with the returned path, editable=true, and autoOpen=true to show and automatically expand the editor once.',
     parameters: {
       path: {
         type: 'string', required: true,
@@ -150,7 +150,7 @@ export function createDesignNewTool(editorHost: EditorHostController, services: 
         applied: true as const,
         saved: true as const,
         ...(isRecord(batch.result) ? { result: batch.result } : {}),
-        note: `Created and saved ${processPath}. Call openpencil_render with this path and editable=true now.`,
+        note: `Created and saved ${processPath}. Call openpencil_render with this path, editable=true, and autoOpen=true now.`,
       }
     },
     presentCall: (args: DesignNewArgs) => ({

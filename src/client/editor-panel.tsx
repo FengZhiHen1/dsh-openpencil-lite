@@ -407,6 +407,7 @@ export function ManagedOpenPencilEditor({
   onLifecycleState,
   onLifecycleController,
   workbenchActions,
+  allowTakeover = true,
 }: {
   grant: PresentationGrant
   colorScheme: EditorColorScheme
@@ -416,6 +417,7 @@ export function ManagedOpenPencilEditor({
   onLifecycleState?: (state: EditorLifecycleState) => void
   onLifecycleController?: (controller: EditorLifecycleController | undefined) => void
   workbenchActions?: React.ReactNode
+  allowTakeover?: boolean
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const launchRef = useRef<LaunchResponse>()
@@ -586,7 +588,7 @@ export function ManagedOpenPencilEditor({
       abort.abort()
       void closeDaemon(dirtyRef.current)
       return true
-    })
+    }, { replace: allowTakeover })
     if (releaseEditor === undefined) {
       setFailure(editorPanelCopy(localeRef.current).editorBusy)
       updatePhase('error')
@@ -661,7 +663,7 @@ export function ManagedOpenPencilEditor({
         clearOpenPencilSelection(sessionId, documentGrant.path)
       }
     }
-  }, [documentGrant.path, documentGrant.url, editorGrant.launchUrl, editorGrant.refreshUrl, updatePhase])
+  }, [allowTakeover, documentGrant.path, documentGrant.url, editorGrant.launchUrl, editorGrant.refreshUrl, updatePhase])
 
   const startInitLoop = useCallback((): void => {
     const launch = launchRef.current

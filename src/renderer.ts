@@ -133,6 +133,8 @@ export interface RenderResult {
   frames?: RenderFrame[]
   frameCount?: number
   editable?: boolean
+  /** Live-card intent: expand the editor once after a newly-created design renders. */
+  autoOpenEditor?: boolean
   document?: DocumentSnapshot
   note?: string
 }
@@ -839,6 +841,7 @@ export function projectRenderGrant(
     ...(result.warnings === undefined ? {} : { warnings: result.warnings }),
     ...(viewer === undefined ? {} : { viewer }),
     ...(editor === undefined ? {} : { editor }),
+    ...(editor === undefined || result.autoOpenEditor !== true ? {} : { autoOpenEditor: true }),
   }
   return { ...value, [PRESENTATION_META_KEY]: envelope } as unknown as JsonValue
 }

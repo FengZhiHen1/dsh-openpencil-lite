@@ -123,7 +123,7 @@ For bounded replay, nested metadata recovery accepts up to 128 top-level frames;
 
 ## Agent design workflow
 
-For a natural-language request with no existing document, the Agent should call `openpencil_new` with a new workspace-relative `.op` path and the first complete `batch_design` program. The tool runs that program in a private managed OpenPencil daemon and publishes the authoritative document only after the whole batch succeeds. It never overwrites an existing path and a failed batch leaves no empty file behind. The Agent should then call `openpencil_render` with the returned path and `editable: true` to present the gallery and editor.
+For a natural-language request with no existing document, the Agent should call `openpencil_new` with a new workspace-relative `.op` path and the first complete `batch_design` program. The tool runs that program in a private managed OpenPencil daemon and publishes the authoritative document only after the whole batch succeeds. It never overwrites an existing path and a failed batch leaves no empty file behind. The Agent should then call `openpencil_render` with the returned path, `editable: true`, and `autoOpen: true` to present the gallery and expand the editor once. Replayed or initially-settled historical cards never auto-open.
 
 Use `openpencil_create` and `openpencil_edit` only for an existing live canvas. Their edits remain unsaved until the editor Save action.
 
