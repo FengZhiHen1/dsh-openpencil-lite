@@ -12,6 +12,7 @@ node_modules
 *.key
 
 # Local build/test output.
+lib/
 coverage/
 *.log
 *.tgz
