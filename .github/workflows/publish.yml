@@ -1,7 +1,8 @@
 name: Publish npm package
 
-# Triggered on a v* tag push — syncs the OpenPencil viewer assets, builds
-# the plugin, verifies the package.json version against the tag, and
+# Triggered on a v* tag push — builds the op-web-sdk wasm pkg inside the
+# vendored OpenPencil submodule (see check.yml), syncs the viewer assets,
+# builds the plugin, verifies the package.json version against the tag, and
 # publishes @zseven-w/dsh-openpencil to the public npm registry.
 #
 # Requires the repository secret:
@@ -20,14 +21,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Clone OpenPencil checkout (viewer asset source)
-        run: git clone --depth 1 https://github.com/ZSeven-W/openpencil.git ../openpencil
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94'
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-bindgen-cli (pinned to the locked version)
+        run: |
+          cd vendor/openpencil
+          version="$(awk '/^name = "wasm-bindgen"$/{found=1; next} found && /^version = /{gsub(/[" ]/,"",$3); print $3; exit}' Cargo.lock)"
+          if [ -z "$version" ]; then
+            echo "::error::could not resolve wasm-bindgen version from Cargo.lock"
+            exit 1
+          fi
+          echo "Installing wasm-bindgen-cli $version"
+          cargo install wasm-bindgen-cli --version "$version" --locked
+      - name: Build op-web-sdk wasm pkg
+        run: |
+          cd vendor/openpencil
+          cargo build -p op-web-sdk --target wasm32-unknown-unknown --features canvaskit --release
+          wasm-bindgen --target web --out-dir crates/op-web-sdk/pkg target/wasm32-unknown-unknown/release/op_web_sdk.wasm
       - name: Sync viewer assets
         run: npm run sync:viewer-assets
       - name: Build

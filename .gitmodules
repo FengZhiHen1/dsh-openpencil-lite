@@ -1,0 +1,3 @@
+[submodule "vendor/openpencil"]
+	path = vendor/openpencil
+	url = https://github.com/ZSeven-W/openpencil.git

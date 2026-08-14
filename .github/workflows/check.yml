@@ -1,14 +1,19 @@
 name: Plugin check
 
-# Runs the full TypeScript build and test suite for the DSH OpenPencil
-# plugin on every PR and push to main. No path filters: the repo is small
-# and every change (sources, scripts, or viewer assets) feeds the build.
+# Two gates on every PR and push to main:
 #
-# The viewer-asset sync needs an OpenPencil checkout as a sibling
-# (packages/op-web-sdk sources + crates/op-host-web CanvasKit assets), so
-# the job clones ZSeven-W/openpencil next to the workspace first. The DSH
-# host/client packages are peer dependencies resolved from the public npm
-# registry by `npm ci`.
+#   check           Fast TypeScript build + logic test suites.
+#   viewer-assets   The slow, real gate: builds the op-web-sdk wasm-bindgen
+#                   pkg inside the vendored OpenPencil submodule
+#                   (vendor/openpencil), syncs the DSH viewer assets, and
+#                   validates them.
+#
+# The op-web-sdk pkg (crates/op-web-sdk/pkg) is a BUILD ARTIFACT — it is not
+# committed to any OpenPencil branch — so the viewer-assets job mirrors
+# openpencil's own web-sdk-bundle.yml recipe (cargo + version-pinned
+# wasm-bindgen-cli, no wasm-pack) before running the plugin's sync gate.
+# OpenPencil is vendored as a git submodule so every run builds the exact
+# revision the plugin is pinned against.
 
 on:
   pull_request:
@@ -21,7 +26,7 @@ concurrency:
 
 jobs:
   check:
-    name: Node 24 / ubuntu
+    name: Node 24 / build + tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,17 +36,59 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Clone OpenPencil checkout (viewer asset source)
-        run: git clone --depth 1 https://github.com/ZSeven-W/openpencil.git ../openpencil
-      - name: Sync viewer assets
-        run: npm run sync:viewer-assets
       - name: Build
         run: npm run build
-      - name: Test viewer assets
-        run: npm run test:viewer-assets
       - name: Test client
         run: npm run test:client
       - name: Test host API
         run: npm run test:host-api
       - name: Test MCP client
         run: npm run test:mcp
+
+  viewer-assets:
+    name: viewer assets / wasm build + sync gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94'
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-bindgen-cli (pinned to the locked version)
+        run: |
+          cd vendor/openpencil
+          # Pin the CLI to the same version as the wasm-bindgen crate in
+          # Cargo.lock so the generated JS glue matches the linked runtime —
+          # a version skew causes the classic wasm-bindgen "schema version
+          # mismatch" panic at mount time. Mirrors openpencil's
+          # web-sdk-bundle.yml extractor.
+          version="$(awk '/^name = "wasm-bindgen"$/{found=1; next} found && /^version = /{gsub(/[" ]/,"",$3); print $3; exit}' Cargo.lock)"
+          if [ -z "$version" ]; then
+            echo "::error::could not resolve wasm-bindgen version from Cargo.lock"
+            exit 1
+          fi
+          echo "Installing wasm-bindgen-cli $version"
+          cargo install wasm-bindgen-cli --version "$version" --locked
+      - name: Build op-web-sdk wasm pkg
+        run: |
+          cd vendor/openpencil
+          # Same recipe as crates/op-web-sdk/tools/build-wasm.sh steps 2-3
+          # (skipping the wasm-opt / gzip size gate, which the DSH sync does
+          # not require — the sync prefers the optimized wasm when present
+          # but accepts the raw bindgen output).
+          cargo build -p op-web-sdk --target wasm32-unknown-unknown --features canvaskit --release
+          wasm-bindgen --target web --out-dir crates/op-web-sdk/pkg target/wasm32-unknown-unknown/release/op_web_sdk.wasm
+      - name: Sync viewer assets
+        run: npm run sync:viewer-assets
+      - name: Build
+        run: npm run build
+      - name: Test viewer assets
+        run: npm run test:viewer-assets

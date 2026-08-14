@@ -71,7 +71,11 @@ async function locateCheckout(configured) {
   const candidates = [
     configured,
     process.env.OPENPENCIL_ROOT,
+    // A sibling checkout wins for local development (it usually carries a
+    // freshly built wasm pkg); the vendored submodule is the fallback used
+    // by CI and fresh clones.
     resolve(projectRoot, '..', 'openpencil'),
+    resolve(projectRoot, 'vendor', 'openpencil'),
   ].filter(Boolean).map(value => resolve(value))
   for (const candidate of [...new Set(candidates)]) {
     if (
