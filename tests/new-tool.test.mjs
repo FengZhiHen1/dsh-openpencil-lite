@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
 
 const { createDesignNewTool } = await import('../lib/new-tool.js')
@@ -7,7 +9,10 @@ const { createDesignNewTool } = await import('../lib/new-tool.js')
 function createHarness(options = {}) {
   const workspaceRoot = '/workspace/project'
   const requestedPath = options.requestedPath ?? 'designs/forage.op'
-  const processPath = options.processPath ?? '/private/tmp/forage.op'
+  // The tool runs a REAL lstat on the parent directory of the resolved
+  // process path, so the default must be a directory that exists on every
+  // platform (`/private/tmp` is macOS-only and breaks Linux CI).
+  const processPath = options.processPath ?? join(tmpdir(), 'forage.op')
   const target = { targetKey: `local:${processPath}`, displayPath: requestedPath }
   const policy = { mode: 'workspace-write', workspaceRoot }
   const documentJson = options.documentJson ?? '{"version":"1.0.0","children":[{"id":"home"}]}\n'

@@ -1,19 +1,17 @@
 name: Plugin check
 
-# Two gates on every PR and push to main:
-#
-#   check           Fast TypeScript build + logic test suites.
-#   viewer-assets   The slow, real gate: builds the op-web-sdk wasm-bindgen
-#                   pkg inside the vendored OpenPencil submodule
-#                   (vendor/openpencil), syncs the DSH viewer assets, and
-#                   validates them.
+# Full pipeline on every PR and push to main: builds the op-web-sdk
+# wasm-bindgen pkg inside the vendored OpenPencil submodule
+# (vendor/openpencil), syncs the DSH viewer assets, builds the TypeScript
+# plugin, and runs every test suite.
 #
 # The op-web-sdk pkg (crates/op-web-sdk/pkg) is a BUILD ARTIFACT — it is not
-# committed to any OpenPencil branch — so the viewer-assets job mirrors
-# openpencil's own web-sdk-bundle.yml recipe (cargo + version-pinned
-# wasm-bindgen-cli, no wasm-pack) before running the plugin's sync gate.
-# OpenPencil is vendored as a git submodule so every run builds the exact
-# revision the plugin is pinned against.
+# committed to any OpenPencil branch — so this workflow mirrors openpencil's
+# own web-sdk-bundle.yml recipe (cargo + version-pinned wasm-bindgen-cli, no
+# wasm-pack) before running the plugin's sync gate. OpenPencil is vendored as
+# a git submodule so every run builds the exact revision the plugin is pinned
+# against. The full pipeline runs in ONE job because several suites (host
+# API routes, viewer asset gate) require the synced assets to exist.
 
 on:
   pull_request:
@@ -26,27 +24,7 @@ concurrency:
 
 jobs:
   check:
-    name: Node 24 / build + tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Build
-        run: npm run build
-      - name: Test client
-        run: npm run test:client
-      - name: Test host API
-        run: npm run test:host-api
-      - name: Test MCP client
-        run: npm run test:mcp
-
-  viewer-assets:
-    name: viewer assets / wasm build + sync gate
+    name: Node 24 / build + viewer assets + tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -92,3 +70,9 @@ jobs:
         run: npm run build
       - name: Test viewer assets
         run: npm run test:viewer-assets
+      - name: Test client
+        run: npm run test:client
+      - name: Test host API
+        run: npm run test:host-api
+      - name: Test MCP client
+        run: npm run test:mcp
