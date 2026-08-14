@@ -108,9 +108,8 @@ DSH OpenPencil เชื่อมต่อ [DeepSeek Harness](https://github.com
 ติดตั้งปลั๊กอินสาธารณะลงใน DSH prerelease ที่ล็อกอินแล้ว โดยไม่ต้องติดตั้ง DSH แบบ global:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > ปลั๊กอิน OpenPencil เป็นแบบสาธารณะและไม่ต้องใช้ npm token หาก DSH prerelease เองต้องมีการยืนยันตัวตนของ registry ให้เก็บข้อมูลรับรองนั้นไว้ใน npm config ระดับผู้ใช้หรือชั่วคราวนอก checkout ที่เก็บนี้ตั้งใจไม่ให้มีข้อมูลรับรอง registry ใด ๆ
@@ -149,7 +148,7 @@ npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
 DSH ให้บริการเฉพาะ `client.js` สำหรับปลั๊กอินฝั่งไคลเอนต์ ดังนั้น OpenPencil ESM SDK, WASM และ CanvasKit จึงถูกจัดเตรียมเป็นสินทรัพย์ same-origin อย่างชัดเจน:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 คำสั่ง sync จะเลือกใช้ checkout `../openpencil` ที่อยู่ข้างเคียง (การพัฒนาท้องถิ่น) เป็นอันดับแรก และใช้ submodule `vendor/openpencil` ที่ vendor ไว้เป็นตัวสำรอง (CI และการ clone ใหม่) ใช้ `OPENPENCIL_ROOT` หรือ `--openpencil-root` เพื่อแทนที่ ไลบรารีสินทรัพย์ที่ build ไว้ล่วงหน้าทั้งหมดสามารถเลือกได้ด้วย `DSH_OPENPENCIL_VIEWER_SOURCE` และการค้นหาตอนรันสามารถแทนที่ได้ด้วย `DSH_OPENPENCIL_VIEWER_ASSET_DIR`
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## Build และตรวจสอบ
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-การ build ต้องใช้ Node 24.11 ขึ้นไป แพ็กเกจ host/client ของ DSH เป็น peer dependencies ที่มาจากโปรไฟล์ DSH เป้าหมาย เครื่องมือ build ถูกแก้ไขจาก dev dependencies ในเครื่อง, checkout DSH ที่ลิงก์อยู่ หรือ DSH source bundle ที่ติดตั้งไว้; `DSH_SOURCE_ROOT` สามารถเลือก source checkout ได้อย่างชัดเจน ล็อกไฟล์จะตรึงเครื่องมือ build สาธารณะแบบ standalone เมื่อสภาพแวดล้อมนั้นถูกจัดเตรียมแยกต่างหาก
+การ build ต้องใช้ Node 24.11 ขึ้นไปและ pnpm แพ็กเกจ host/client ของ DSH เป็น peer dependencies ที่มาจากโปรไฟล์ DSH เป้าหมาย เครื่องมือ build ถูกแก้ไขจาก dev dependencies ในเครื่อง, checkout DSH ที่ลิงก์อยู่ หรือ DSH source bundle ที่ติดตั้งไว้; `DSH_SOURCE_ROOT` สามารถเลือก source checkout ได้อย่างชัดเจน ล็อกไฟล์จะตรึงเครื่องมือ build สาธารณะแบบ standalone เมื่อสภาพแวดล้อมนั้นถูกจัดเตรียมแยกต่างหาก
 
 สำหรับ DSH prerelease ส่วนตัว ให้เก็บข้อมูลรับรอง npm ที่ออกให้ไว้นอกที่เก็บนี้ (เช่นใน `.npmrc` ระดับผู้ใช้หรือชั่วคราว) และรันเวอร์ชันที่ต้องการโดยตรง:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 ห้าม commit `.npmrc`, `NPM_TOKEN` หรือข้อมูลรับรอง registry ที่คัดลอกมา ที่เก็บนี้ละเว้นการกำหนดค่า npm ในเครื่องตามค่าเริ่มต้น
@@ -251,7 +250,7 @@ DSH OpenPencil คือปลั๊กอิน DeepSeek Harness สำหร�
 
 ## การมีส่วนร่วม
 
-ยินดีต้อนรับการมีส่วนร่วม! Fork และ clone สร้าง branch รัน `npm run build` และชุดทดสอบ commit ด้วย [Conventional Commits](https://www.conventionalcommits.org/) และเปิด PR ไปที่ `main`
+ยินดีต้อนรับการมีส่วนร่วม! Fork และ clone สร้าง branch รัน `pnpm run build` และชุดทดสอบ commit ด้วย [Conventional Commits](https://www.conventionalcommits.org/) และเปิด PR ไปที่ `main`
 
 ## ชุมชน
 

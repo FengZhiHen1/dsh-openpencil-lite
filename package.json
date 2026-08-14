@@ -45,14 +45,21 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
-    "build": "node scripts/run-tool.mjs tsc -p tsconfig.json && npm run build:client",
+    "build": "node scripts/run-tool.mjs tsc -p tsconfig.json && pnpm run build:client",
     "build:client": "node scripts/run-tool.mjs tsc -p tsconfig.client.json && node scripts/run-tool.mjs tsdown src/client/index.tsx --format cjs --platform browser --target es2022 --tsconfig tsconfig.client.json --deps.never-bundle react --deps.never-bundle react/jsx-runtime --deps.never-bundle react-dom --deps.never-bundle react-dom/client --out-dir .client-build --clean --sourcemap --logLevel warn && node scripts/build-client.mjs",
     "sync:viewer-assets": "node scripts/sync-viewer-assets.mjs",
     "test:viewer-assets": "node scripts/test-viewer-assets.mjs",
-    "test:client": "npm run build:client && node --test tests/client.test.mjs",
-    "test:host-api": "npm run build && node --test tests/host-service.test.mjs tests/new-tool.test.mjs tests/presentation-hydration.test.mjs tests/editor-host-lifecycle.test.mjs",
-    "test:mcp": "npm run build && node --test tests/mcp-client.test.mjs",
-    "test:host": "npm run build && node scripts/test-host.mjs"
+    "test:client": "pnpm run build:client && node --test tests/client.test.mjs",
+    "test:host-api": "pnpm run build && node --test tests/host-service.test.mjs tests/new-tool.test.mjs tests/presentation-hydration.test.mjs tests/editor-host-lifecycle.test.mjs",
+    "test:mcp": "pnpm run build && node --test tests/mcp-client.test.mjs",
+    "test:host": "pnpm run build && node scripts/test-host.mjs"
+  },
+  "packageManager": "pnpm@10.12.1",
+  "pnpm": {
+    "autoInstallPeers": true,
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "dsh": {
     "bundle": {

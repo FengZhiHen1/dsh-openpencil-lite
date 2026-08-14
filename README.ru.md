@@ -108,9 +108,8 @@ DSH OpenPencil связывает [DeepSeek Harness](https://github.com/deepseek
 Установите публичный плагин в аутентифицированный пререлиз DSH без глобальной установки DSH:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > Плагин OpenPencil публичный и не требует npm-токена. Если сам пререлиз DSH требует аутентификации в реестре, храните эти учётные данные в пользовательском или временном npm-конфиге вне этого чекаута. Этот репозиторий намеренно не содержит учётных данных реестра.
@@ -149,7 +148,7 @@ npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
 DSH обслуживает только `client.js` для клиентского плагина, поэтому ESM SDK OpenPencil, его WASM и CanvasKit подготавливаются как явные ассеты с тем же источником:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 Команда синхронизации предпочитает соседний чекаут `../openpencil` (локальная разработка) и переключается на вендорный субмодуль `vendor/openpencil` (CI и свежие клоны). Переопределите его с помощью `OPENPENCIL_ROOT` или `--openpencil-root`. Полный каталог предсобранных ассетов можно выбрать с помощью `DSH_OPENPENCIL_VIEWER_SOURCE`. Поиск во время выполнения можно переопределить с помощью `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## Сборка и проверка
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-Для сборки требуется Node 24.11 или новее. Пакеты хоста и клиента DSH — это peer-зависимости, поставляемые целевым профилем DSH. Инструменты сборки разрешаются из локальных dev-зависимостей, активного привязанного чекаута DSH или установленного бандла исходников DSH; `DSH_SOURCE_ROOT` может явно выбрать чекаут исходников. Lockfile фиксирует автономные публичные инструменты сборки, когда такое окружение подготавливается отдельно.
+Для сборки требуется Node 24.11 или новее и pnpm. Пакеты хоста и клиента DSH — это peer-зависимости, поставляемые целевым профилем DSH. Инструменты сборки разрешаются из локальных dev-зависимостей, активного привязанного чекаута DSH или установленного бандла исходников DSH; `DSH_SOURCE_ROOT` может явно выбрать чекаут исходников. Lockfile фиксирует автономные публичные инструменты сборки, когда такое окружение подготавливается отдельно.
 
 Для приватного пререлиза DSH храните выданные npm-учётные данные вне этого репозитория (например, в пользовательском или временном `.npmrc`) и запускайте запрошенную версию напрямую:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 Никогда не коммитьте `.npmrc`, `NPM_TOKEN` или скопированные учётные данные реестра. Этот репозиторий по умолчанию игнорирует локальную npm-конфигурацию.
@@ -251,7 +250,7 @@ DSH OpenPencil — это плагин DeepSeek Harness для **[OpenPencil](ht
 
 ## Участие в разработке
 
-Вклад приветствуется! Форкните и клонируйте репозиторий, создайте ветку, запустите `npm run build` и тестовые наборы, коммитьте с [Conventional Commits](https://www.conventionalcommits.org/) и открывайте PR в `main`.
+Вклад приветствуется! Форкните и клонируйте репозиторий, создайте ветку, запустите `pnpm run build` и тестовые наборы, коммитьте с [Conventional Commits](https://www.conventionalcommits.org/) и открывайте PR в `main`.
 
 ## Сообщество
 

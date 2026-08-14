@@ -108,9 +108,8 @@ DSH OpenPencil 將 [DeepSeek Harness](https://github.com/deepseek-ai/DSH) 與 [O
 將公開外掛程式安裝到已通過驗證的 DSH 預發行版，而不需在全域安裝 DSH：
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > OpenPencil 外掛程式是公開的，不需要 npm token。如果 DSH 預發行版本身需要 registry 驗證，請將該憑證存放在 checkout 目錄以外的使用者層級或暫時性 npm 設定中。本儲存庫刻意不包含任何 registry 憑證。
@@ -149,7 +148,7 @@ Jian 備援的搜尋會依序使用 `DSH_OPENPENCIL_JIAN`、已知的本機發�
 DSH 僅為用戶端外掛程式提供 `client.js`，因此 OpenPencil ESM SDK、其 WASM 與 CanvasKit 會以明確的同源資源方式進行暫存：
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 同步指令優先使用同層的 `../openpencil` checkout（本機開發），並在無法取得時退回使用 vendored 的 `vendor/openpencil` submodule（CI 與全新 clone）。可用 `OPENPENCIL_ROOT` 或 `--openpencil-root` 覆寫。完整的預先建置資源目錄可透過 `DSH_OPENPENCIL_VIEWER_SOURCE` 選取。執行期的查詢路徑則可用 `DSH_OPENPENCIL_VIEWER_ASSET_DIR` 覆寫。
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## 建置與驗證
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-建置需要 Node 24.11 或更新版本。DSH 的 host／client 套件是由目標 DSH profile 提供的對等相依（peer dependency）。建置工具會從本機開發相依、目前連結的 DSH checkout 或已安裝的 DSH 來源套件中解析；`DSH_SOURCE_ROOT` 可明確指定來源 checkout。當該環境為另行佈建時，lockfile 會固定獨立的公開建置工具。
+建置需要 Node 24.11 或更新版本，以及 pnpm。DSH 的 host／client 套件是由目標 DSH profile 提供的對等相依（peer dependency）。建置工具會從本機開發相依、目前連結的 DSH checkout 或已安裝的 DSH 來源套件中解析；`DSH_SOURCE_ROOT` 可明確指定來源 checkout。當該環境為另行佈建時，lockfile 會固定獨立的公開建置工具。
 
 若為私有的 DSH 預發行版，請將核發的 npm 憑證存放在本儲存庫之外（例如使用者層級或暫時性的 `.npmrc`），並直接執行要求的版本：
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 絕對不要提交 `.npmrc`、`NPM_TOKEN` 或複製的 registry 憑證。本儲存庫預設會忽略本機的 npm 設定。
@@ -251,7 +250,7 @@ DSH OpenPencil 是 **[OpenPencil](https://github.com/ZSeven-W/openpencil)** 的 
 
 ## 貢獻
 
-歡迎貢獻！Fork 並 clone、建立分支、執行 `npm run build` 與測試套件、使用 [Conventional Commits](https://www.conventionalcommits.org/) 提交，並針對 `main` 開啟 PR。
+歡迎貢獻！Fork 並 clone、建立分支、執行 `pnpm run build` 與測試套件、使用 [Conventional Commits](https://www.conventionalcommits.org/) 提交，並針對 `main` 開啟 PR。
 
 ## 社群
 

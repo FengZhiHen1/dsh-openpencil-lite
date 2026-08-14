@@ -108,9 +108,8 @@ O cartão da ferramenta e o editor gerenciado seguem a localização chinês/ing
 Instale o plugin público em uma pré-versão do DSH autenticada sem instalar o DSH globalmente:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > O plugin do OpenPencil é público e não exige token npm. Se a pré-versão do DSH em si exigir autenticação de registro, mantenha essa credencial em um config npm no nível do usuário ou temporário, fora do checkout. Este repositório não contém intencionalmente nenhuma credencial de registro.
@@ -149,7 +148,7 @@ A descoberta do fallback Jian usa `DSH_OPENPENCIL_JIAN`, uma build de release lo
 O DSH serve apenas `client.js` para um plugin de cliente, então o ESM SDK do OpenPencil, seu WASM e o CanvasKit são preparados como recursos explícitos de mesma origem:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 O comando de sincronização prefere um checkout irmão `../openpencil` (desenvolvimento local), recorrendo ao submódulo fornecido `vendor/openpencil` (CI e clones novos). Substitua-o com `OPENPENCIL_ROOT` ou `--openpencil-root`. Um diretório de recursos pré-compilado completo pode ser selecionado com `DSH_OPENPENCIL_VIEWER_SOURCE`. A busca em tempo de execução pode ser substituída com `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## Compilação e Verificação
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-As compilações exigem Node 24.11 ou mais recente. Os pacotes host/cliente do DSH são dependências pares fornecidas pelo perfil DSH de destino. As ferramentas de build são resolvidas a partir de dependências de desenvolvimento locais, do checkout DSH vinculado ativo ou de um bundle de fonte DSH instalado; `DSH_SOURCE_ROOT` pode selecionar explicitamente um checkout de fonte. O lockfile fixa as ferramentas de build públicas autônomas quando esse ambiente é provisionado separadamente.
+As compilações exigem Node 24.11 ou mais recente e pnpm. Os pacotes host/cliente do DSH são dependências pares fornecidas pelo perfil DSH de destino. As ferramentas de build são resolvidas a partir de dependências de desenvolvimento locais, do checkout DSH vinculado ativo ou de um bundle de fonte DSH instalado; `DSH_SOURCE_ROOT` pode selecionar explicitamente um checkout de fonte. O lockfile fixa as ferramentas de build públicas autônomas quando esse ambiente é provisionado separadamente.
 
 Para uma pré-versão privada do DSH, mantenha a credencial npm emitida fora deste repositório (por exemplo, em um `.npmrc` no nível do usuário ou temporário) e execute a versão solicitada diretamente:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 Nunca faça commit de `.npmrc`, `NPM_TOKEN` ou credenciais de registro copiadas. Este repositório ignora a configuração npm local por padrão.
@@ -251,7 +250,7 @@ O DSH OpenPencil é o plugin do DeepSeek Harness para **[OpenPencil](https://git
 
 ## Como Contribuir
 
-Contribuições são bem-vindas! Faça um fork e clone, crie um branch, execute `npm run build` e as suítes de teste, faça commit com [Conventional Commits](https://www.conventionalcommits.org/) e abra um PR contra o `main`.
+Contribuições são bem-vindas! Faça um fork e clone, crie um branch, execute `pnpm run build` e as suítes de teste, faça commit com [Conventional Commits](https://www.conventionalcommits.org/) e abra um PR contra o `main`.
 
 ## Comunidade
 

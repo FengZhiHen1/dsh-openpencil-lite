@@ -108,9 +108,8 @@ Kartu alat dan editor terkelola mengikuti lokale Tionghoa/Inggris serta tema ter
 Pasang plugin publik ke dalam DSH prerelease yang sudah diautentikasi tanpa memasang DSH secara global:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > Plugin OpenPencil bersifat publik dan tidak memerlukan token npm. Jika DSH prerelease itu sendiri memerlukan autentikasi registry, simpan kredensial tersebut di konfigurasi npm tingkat-pengguna atau sementara di luar checkout. Repositori ini sengaja tidak memuat kredensial registry apa pun.
@@ -149,7 +148,7 @@ Penemuan fallback Jian menggunakan `DSH_OPENPENCIL_JIAN`, build rilis lokal yang
 DSH hanya menyajikan `client.js` untuk plugin klien, sehingga OpenPencil ESM SDK, WASM-nya, dan CanvasKit disiapkan sebagai aset same-origin yang eksplisit:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 Perintah sinkronisasi lebih mengutamakan checkout `../openpencil` yang bersebelahan (pengembangan lokal), dengan fallback ke submodul `vendor/openpencil` yang di-vendor (CI dan clone baru). Ganti dengan `OPENPENCIL_ROOT` atau `--openpencil-root`. Direktori aset pra-build yang lengkap dapat dipilih dengan `DSH_OPENPENCIL_VIEWER_SOURCE`. Pencarian saat runtime dapat diganti dengan `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## Build dan Verifikasi
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-Build memerlukan Node 24.11 atau lebih baru. Paket host/klien DSH adalah dependensi peer yang disediakan oleh profil DSH target. Alat build diselesaikan dari dependensi dev lokal, checkout DSH tertaut yang aktif, atau bundel sumber DSH yang terpasang; `DSH_SOURCE_ROOT` dapat memilih checkout sumber secara eksplisit. Lockfile mengunci alat build publik yang berdiri sendiri saat lingkungan tersebut disediakan secara terpisah.
+Build memerlukan Node 24.11 atau lebih baru dan pnpm. Paket host/klien DSH adalah dependensi peer yang disediakan oleh profil DSH target. Alat build diselesaikan dari dependensi dev lokal, checkout DSH tertaut yang aktif, atau bundel sumber DSH yang terpasang; `DSH_SOURCE_ROOT` dapat memilih checkout sumber secara eksplisit. Lockfile mengunci alat build publik yang berdiri sendiri saat lingkungan tersebut disediakan secara terpisah.
 
 Untuk DSH prerelease privat, simpan kredensial npm yang diterbitkan di luar repositori ini (misalnya di `.npmrc` tingkat-pengguna atau sementara) dan jalankan versi yang diminta secara langsung:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 Jangan pernah melakukan commit pada `.npmrc`, `NPM_TOKEN`, atau kredensial registry yang disalin. Repositori ini mengabaikan konfigurasi npm lokal secara default.
@@ -251,7 +250,7 @@ DSH OpenPencil adalah plugin DeepSeek Harness untuk **[OpenPencil](https://githu
 
 ## Kontribusi
 
-Kontribusi sangat diterima! Fork dan clone, buat branch, jalankan `npm run build` dan rangkaian tes, commit dengan [Conventional Commits](https://www.conventionalcommits.org/), lalu buka PR ke `main`.
+Kontribusi sangat diterima! Fork dan clone, buat branch, jalankan `pnpm run build` dan rangkaian tes, commit dengan [Conventional Commits](https://www.conventionalcommits.org/), lalu buka PR ke `main`.
 
 ## Komunitas
 

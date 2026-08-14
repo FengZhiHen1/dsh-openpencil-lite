@@ -108,9 +108,8 @@ Araç kartı ve yönetilen düzenleyici, düzenleme oturumunu yeniden yüklemede
 Genel eklentiyi, DSH'yi genel olarak kurmadan kimliği doğrulanmış bir DSH ön sürümüne kurun:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > OpenPencil eklentisi geneldir ve npm belirteci gerektirmez. DSH ön sürümünün kendisi kayıt defteri kimlik doğrulaması gerektiriyorsa, bu kimlik bilgisini çalışma kopyasının dışında kullanıcı düzeyinde veya geçici bir npm yapılandırmasında saklayın. Bu depo bilinçli olarak hiçbir kayıt defteri kimlik bilgisi içermez.
@@ -149,7 +148,7 @@ Jian yedeği keşfi `DSH_OPENPENCIL_JIAN` değişkenini, bilinen bir yerel sür�
 DSH bir istemci eklentisi için yalnızca `client.js` sunar; bu nedenle OpenPencil ESM SDK'sı, WASM'ı ve CanvasKit, açıkça aynı kaynaklı varlıklar olarak hazırlanır:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 Senkronizasyon komutu kardeş bir `../openpencil` çalışma kopyasını tercih eder (yerel geliştirme), gerekirse depoya gömülü `vendor/openpencil` alt modülüne geri döner (CI ve yeni klonlar). `OPENPENCIL_ROOT` veya `--openpencil-root` ile geçersiz kılabilirsiniz. Eksiksiz, önceden derlenmiş bir varlık dizini `DSH_OPENPENCIL_VIEWER_SOURCE` ile seçilebilir. Çalışma zamanı araması `DSH_OPENPENCIL_VIEWER_ASSET_DIR` ile geçersiz kılınabilir.
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## Derleme ve Doğrulama
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-Derlemeler Node 24.11 veya daha yenisini gerektirir. DSH ana bilgisayar/istemci paketleri, hedef DSH profili tarafından sağlanan eş bağımlılıklardır. Derleme araçları yerel geliştirme bağımlılıklarından, etkin bağlantılı DSH çalışma kopyasından veya kurulu bir DSH kaynak paketinden çözümlenir; `DSH_SOURCE_ROOT` bir kaynak çalışma kopyasını açıkça seçebilir. Kilit dosyası, bu ortam ayrı olarak sağlandığında bağımsız genel derleme araçlarını sabitler.
+Derlemeler Node 24.11 veya daha yenisini ve pnpm gerektirir. DSH ana bilgisayar/istemci paketleri, hedef DSH profili tarafından sağlanan eş bağımlılıklardır. Derleme araçları yerel geliştirme bağımlılıklarından, etkin bağlantılı DSH çalışma kopyasından veya kurulu bir DSH kaynak paketinden çözümlenir; `DSH_SOURCE_ROOT` bir kaynak çalışma kopyasını açıkça seçebilir. Kilit dosyası, bu ortam ayrı olarak sağlandığında bağımsız genel derleme araçlarını sabitler.
 
 Özel bir DSH ön sürümü için verilen npm kimlik bilgisini bu deponun dışında tutun (örneğin kullanıcı düzeyinde veya geçici bir `.npmrc` içinde) ve istenen sürümü doğrudan çalıştırın:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 `.npmrc`, `NPM_TOKEN` veya kopyalanmış kayıt defteri kimlik bilgilerini asla işlemeyin. Bu depo varsayılan olarak yerel npm yapılandırmasını yok sayar.
@@ -251,7 +250,7 @@ DSH OpenPencil, **[OpenPencil](https://github.com/ZSeven-W/openpencil)** — dü
 
 ## Katkıda Bulunma
 
-Katkılar memnuniyetle karşılanır! Fork edip kopyalayın, bir dal oluşturun, `npm run build` ve test paketlerini çalıştırın, [Conventional Commits](https://www.conventionalcommits.org/) ile işleyin ve `main` dalına bir PR açın.
+Katkılar memnuniyetle karşılanır! Fork edip kopyalayın, bir dal oluşturun, `pnpm run build` ve test paketlerini çalıştırın, [Conventional Commits](https://www.conventionalcommits.org/) ile işleyin ve `main` dalına bir PR açın.
 
 ## Topluluk
 

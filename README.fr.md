@@ -108,9 +108,8 @@ La carte de l'outil et l'éditeur géré suivent la locale chinois/anglais et le
 Installez le plugin public dans une pré-version DSH authentifiée sans installer DSH globalement :
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > Le plugin OpenPencil est public et ne requiert aucun jeton npm. Si la pré-version DSH elle-même requiert une authentification auprès du registre, conservez cet identifiant dans une configuration npm au niveau utilisateur ou temporaire, hors du dépôt. Ce dépôt ne contient délibérément aucun identifiant de registre.
@@ -149,7 +148,7 @@ La découverte du moteur de secours Jian utilise `DSH_OPENPENCIL_JIAN`, une vers
 DSH ne sert que `client.js` pour un plugin client ; le SDK ESM d'OpenPencil, son WASM et CanvasKit sont donc préparés comme des ressources explicites de même origine :
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 La commande de synchronisation privilégie un dépôt voisin `../openpencil` (développement local), en recourant en dernier ressort au sous-module vendored `vendor/openpencil` (CI et nouveaux clones). Remplacez-la avec `OPENPENCIL_ROOT` ou `--openpencil-root`. Un répertoire de ressources précompilées complet peut être sélectionné avec `DSH_OPENPENCIL_VIEWER_SOURCE`. La recherche au runtime peut être remplacée avec `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## Compilation et vérification
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-Les compilations nécessitent Node 24.11 ou plus récent. Les paquets hôte/client de DSH sont des dépendances de pairs fournies par le profil DSH cible. Les outils de compilation sont résolus à partir des dépendances de développement locales, du dépôt DSH lié actif ou d'un bundle source DSH installé ; `DSH_SOURCE_ROOT` permet de sélectionner explicitement un dépôt source. Le lockfile épingle les outils de compilation publics autonomes lorsque cet environnement est provisionné séparément.
+Les compilations nécessitent Node 24.11 ou plus récent et pnpm. Les paquets hôte/client de DSH sont des dépendances de pairs fournies par le profil DSH cible. Les outils de compilation sont résolus à partir des dépendances de développement locales, du dépôt DSH lié actif ou d'un bundle source DSH installé ; `DSH_SOURCE_ROOT` permet de sélectionner explicitement un dépôt source. Le lockfile épingle les outils de compilation publics autonomes lorsque cet environnement est provisionné séparément.
 
 Pour une pré-version DSH privée, conservez l'identifiant npm délivré hors de ce dépôt (par exemple dans un `.npmrc` au niveau utilisateur ou temporaire) et exécutez directement la version demandée :
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 Ne validez jamais `.npmrc`, `NPM_TOKEN` ou des identifiants de registre copiés. Ce dépôt ignore la configuration npm locale par défaut.
@@ -251,7 +250,7 @@ DSH OpenPencil est le plugin DeepSeek Harness pour **[OpenPencil](https://github
 
 ## Contribuer
 
-Les contributions sont les bienvenues ! Forkez et clonez, créez une branche, exécutez `npm run build` et les suites de tests, validez avec des [Conventional Commits](https://www.conventionalcommits.org/) et ouvrez une PR vers `main`.
+Les contributions sont les bienvenues ! Forkez et clonez, créez une branche, exécutez `pnpm run build` et les suites de tests, validez avec des [Conventional Commits](https://www.conventionalcommits.org/) et ouvrez une PR vers `main`.
 
 ## Communauté
 

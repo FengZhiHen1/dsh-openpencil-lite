@@ -108,9 +108,8 @@ DSH OpenPencil [DeepSeek Harness](https://github.com/deepseek-ai/DSH) को [Op
 सार्वजनिक प्लगइन को DSH को वैश्विक रूप से इंस्टॉल किए बिना एक प्रमाणित DSH प्री-रिलीज़ में इंस्टॉल करें:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > OpenPencil प्लगइन सार्वजनिक है और इसके लिए किसी npm टोकन की आवश्यकता नहीं है। यदि DSH प्री-रिलीज़ को स्वयं रजिस्ट्री प्रमाणीकरण की आवश्यकता होती है, तो उस क्रेडेंशियल को चेकआउट के बाहर उपयोगकर्ता-स्तरीय या अस्थायी npm कॉन्फ़िग में रखें। इस रिपॉज़िटरी में जानबूझकर कोई रजिस्ट्री क्रेडेंशियल नहीं है।
@@ -149,7 +148,7 @@ Jian फ़ॉलबैक डिस्कवरी `DSH_OPENPENCIL_JIAN`, ए�
 DSH क्लाइंट प्लगइन के लिए केवल `client.js` परोसता है, इसलिए OpenPencil ESM SDK, उसका WASM और CanvasKit को स्पष्ट समान-मूल (same-origin) एसेट के रूप में स्टेज किया जाता है:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 सिंक कमांड एक सहोदर `../openpencil` चेकआउट को प्राथमिकता देता है (स्थानीय विकास), वेंडर किए गए `vendor/openpencil` सबमॉड्यूल (CI और नई क्लोन) पर फ़ॉलबैक करता है। इसे `OPENPENCIL_ROOT` या `--openpencil-root` से ओवरराइड करें। `DSH_OPENPENCIL_VIEWER_SOURCE` से एक संपूर्ण पूर्व-निर्मित एसेट निर्देशिका चुनी जा सकती है। `DSH_OPENPENCIL_VIEWER_ASSET_DIR` से रनटाइम लुकअप को ओवरराइड किया जा सकता है।
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## बिल्ड और सत्यापन
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-बिल्ड के लिए Node 24.11 या उससे नया संस्करण आवश्यक है। DSH होस्ट/क्लाइंट पैकेज लक्षित DSH प्रोफ़ाइल द्वारा प्रदान की गई पीयर निर्भरताएँ हैं। बिल्ड टूल स्थानीय डेव निर्भरताओं, सक्रिय लिंक किए गए DSH चेकआउट या इंस्टॉल किए गए DSH स्रोत बंडल से हल किए जाते हैं; `DSH_SOURCE_ROOT` स्पष्ट रूप से एक स्रोत चेकआउट चुन सकता है। जब उस वातावरण को अलग से प्रावधानित किया जाता है, तो लॉकफ़ाइल स्टैंडअलोन सार्वजनिक बिल्ड टूलिंग को पिन करती है।
+बिल्ड के लिए Node 24.11 या उससे नया संस्करण और pnpm आवश्यक है। DSH होस्ट/क्लाइंट पैकेज लक्षित DSH प्रोफ़ाइल द्वारा प्रदान की गई पीयर निर्भरताएँ हैं। बिल्ड टूल स्थानीय डेव निर्भरताओं, सक्रिय लिंक किए गए DSH चेकआउट या इंस्टॉल किए गए DSH स्रोत बंडल से हल किए जाते हैं; `DSH_SOURCE_ROOT` स्पष्ट रूप से एक स्रोत चेकआउट चुन सकता है। जब उस वातावरण को अलग से प्रावधानित किया जाता है, तो लॉकफ़ाइल स्टैंडअलोन सार्वजनिक बिल्ड टूलिंग को पिन करती है।
 
 निजी DSH प्री-रिलीज़ के लिए, जारी किया गया npm क्रेडेंशियल इस रिपॉज़िटरी के बाहर रखें (उदाहरण के लिए उपयोगकर्ता-स्तरीय या अस्थायी `.npmrc` में) और अनुरोधित संस्करण सीधे चलाएँ:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 `.npmrc`, `NPM_TOKEN` या कॉपी किए गए रजिस्ट्री क्रेडेंशियल कभी कमिट न करें। यह रिपॉज़िटरी डिफ़ॉल्ट रूप से स्थानीय npm कॉन्फ़िगरेशन को अनदेखा करती है।
@@ -251,7 +250,7 @@ DSH OpenPencil **[OpenPencil](https://github.com/ZSeven-W/openpencil)** के �
 
 ## योगदान
 
-योगदान का स्वागत है! Fork और clone करें, एक ब्रांच बनाएँ, `npm run build` और टेस्ट सुइट चलाएँ, [Conventional Commits](https://www.conventionalcommits.org/) के साथ कमिट करें, और `main` के विरुद्ध एक PR खोलें।
+योगदान का स्वागत है! Fork और clone करें, एक ब्रांच बनाएँ, `pnpm run build` और टेस्ट सुइट चलाएँ, [Conventional Commits](https://www.conventionalcommits.org/) के साथ कमिट करें, और `main` के विरुद्ध एक PR खोलें।
 
 ## समुदाय
 

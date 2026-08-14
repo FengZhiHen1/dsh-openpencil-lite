@@ -108,9 +108,8 @@ Thẻ công cụ và trình biên tập quản lý tuân theo ngôn ngữ Trung/
 Cài plugin công khai vào một bản prerelease đã xác thực của DSH mà không cần cài DSH toàn cục:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > Plugin OpenPencil là công khai và không yêu cầu token npm. Nếu bản prerelease của DSH tự nó yêu cầu xác thực registry, hãy giữ thông tin xác thực đó trong một cấu hình npm cấp người dùng hoặc tạm thời bên ngoài thư mục checkout. Kho lưu trữ này cố ý không chứa bất kỳ thông tin xác thực registry nào.
@@ -149,7 +148,7 @@ Việc tìm kiếm dự phòng Jian sử dụng `DSH_OPENPENCIL_JIAN`, một b�
 DSH chỉ phục vụ `client.js` cho một client plugin, vì vậy SDK ESM của OpenPencil, WASM của nó và CanvasKit được đưa vào làm các tài nguyên cùng nguồn gốc tường minh:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 Lệnh sync ưu tiên dùng thư mục checkout `../openpencil` liền kề (phát triển cục bộ), rồi dự phòng sang submodule `vendor/openpencil` được đưa vào kho (CI và các bản clone mới). Ghi đè nó bằng `OPENPENCIL_ROOT` hoặc `--openpencil-root`. Một thư mục tài nguyên đã được dựng sẵn hoàn chỉnh có thể được chọn bằng `DSH_OPENPENCIL_VIEWER_SOURCE`. Việc tra cứu lúc chạy có thể được ghi đè bằng `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## Xây dựng và Kiểm chứng
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-Việc xây dựng yêu cầu Node 24.11 trở lên. Các gói host/client của DSH là các peer dependency do hồ sơ DSH mục tiêu cung cấp. Các công cụ xây dựng được phân giải từ dev dependencies cục bộ, thư mục checkout DSH đã liên kết đang hoạt động hoặc một bundle nguồn DSH đã cài đặt; `DSH_SOURCE_ROOT` có thể chọn một checkout nguồn một cách tường minh. Lockfile cố định các công cụ xây dựng công khai độc lập khi môi trường đó được cấp phát riêng biệt.
+Việc xây dựng yêu cầu Node 24.11 trở lên và pnpm. Các gói host/client của DSH là các peer dependency do hồ sơ DSH mục tiêu cung cấp. Các công cụ xây dựng được phân giải từ dev dependencies cục bộ, thư mục checkout DSH đã liên kết đang hoạt động hoặc một bundle nguồn DSH đã cài đặt; `DSH_SOURCE_ROOT` có thể chọn một checkout nguồn một cách tường minh. Lockfile cố định các công cụ xây dựng công khai độc lập khi môi trường đó được cấp phát riêng biệt.
 
 Đối với một bản prerelease riêng tư của DSH, hãy giữ thông tin xác thực npm được cấp bên ngoài kho lưu trữ này (ví dụ trong một `.npmrc` cấp người dùng hoặc tạm thời) và chạy trực tiếp phiên bản được yêu cầu:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 Không bao giờ commit `.npmrc`, `NPM_TOKEN` hoặc thông tin xác thực registry được sao chép. Kho lưu trữ này mặc định bỏ qua cấu hình npm cục bộ.
@@ -251,7 +250,7 @@ DSH OpenPencil là plugin DeepSeek Harness dành cho **[OpenPencil](https://gith
 
 ## Đóng góp
 
-Rất hoan nghênh các đóng góp! Hãy fork và clone, tạo một nhánh, chạy `npm run build` và các bộ kiểm thử, commit theo [Conventional Commits](https://www.conventionalcommits.org/) và mở một PR tới nhánh `main`.
+Rất hoan nghênh các đóng góp! Hãy fork và clone, tạo một nhánh, chạy `pnpm run build` và các bộ kiểm thử, commit theo [Conventional Commits](https://www.conventionalcommits.org/) và mở một PR tới nhánh `main`.
 
 ## Cộng đồng
 

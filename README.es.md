@@ -108,9 +108,8 @@ La tarjeta de la herramienta y el editor administrado siguen la configuración r
 Instala el plugin público en una versión preliminar de DSH autenticada sin instalar DSH de forma global:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > El plugin de OpenPencil es público y no requiere un token de npm. Si la versión preliminar de DSH en sí requiere autenticación del registro, mantén esa credencial en una configuración de npm a nivel de usuario o temporal, fuera del checkout. Este repositorio no contiene credenciales de registro a propósito.
@@ -149,7 +148,7 @@ La detección del fallback Jian usa `DSH_OPENPENCIL_JIAN`, una compilación de l
 DSH solo sirve `client.js` para un plugin de cliente, por lo que el SDK ESM de OpenPencil, su WASM y CanvasKit se preparan como recursos explícitos del mismo origen:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 El comando de sincronización prefiere un checkout hermano `../openpencil` (desarrollo local), recurriendo al submódulo vendored `vendor/openpencil` (CI y clones nuevos). Puedes anularlo con `OPENPENCIL_ROOT` o `--openpencil-root`. Se puede seleccionar un directorio de recursos precompilado completo con `DSH_OPENPENCIL_VIEWER_SOURCE`. La búsqueda en tiempo de ejecución se puede anular con `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## Compilación y verificación
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-Las compilaciones requieren Node 24.11 o superior. Los paquetes de host/cliente de DSH son dependencias pares proporcionadas por el perfil DSH de destino. Las herramientas de compilación se resuelven desde las dependencias de desarrollo locales, el checkout de DSH vinculado activo o un bundle de código fuente de DSH instalado; `DSH_SOURCE_ROOT` puede seleccionar un checkout de código fuente explícitamente. El lockfile fija las herramientas de compilación públicas independientes cuando ese entorno se aprovisiona por separado.
+Las compilaciones requieren Node 24.11 o superior y pnpm. Los paquetes de host/cliente de DSH son dependencias pares proporcionadas por el perfil DSH de destino. Las herramientas de compilación se resuelven desde las dependencias de desarrollo locales, el checkout de DSH vinculado activo o un bundle de código fuente de DSH instalado; `DSH_SOURCE_ROOT` puede seleccionar un checkout de código fuente explícitamente. El lockfile fija las herramientas de compilación públicas independientes cuando ese entorno se aprovisiona por separado.
 
 Para una versión preliminar privada de DSH, mantén la credencial npm emitida fuera de este repositorio (por ejemplo, en un `.npmrc` a nivel de usuario o temporal) y ejecuta directamente la versión solicitada:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 Nunca hagas commit de `.npmrc`, `NPM_TOKEN` ni credenciales de registro copiadas. Este repositorio ignora la configuración local de npm por defecto.
@@ -251,7 +250,7 @@ DSH OpenPencil es el plugin de DeepSeek Harness para **[OpenPencil](https://gith
 
 ## Contribuciones
 
-¡Las contribuciones son bienvenidas! Haz fork y clona, crea una rama, ejecuta `npm run build` y las suites de pruebas, haz commit con [Conventional Commits](https://www.conventionalcommits.org/) y abre un PR contra `main`.
+¡Las contribuciones son bienvenidas! Haz fork y clona, crea una rama, ejecuta `pnpm run build` y las suites de pruebas, haz commit con [Conventional Commits](https://www.conventionalcommits.org/) y abre un PR contra `main`.
 
 ## Comunidad
 

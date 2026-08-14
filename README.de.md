@@ -108,9 +108,8 @@ Die Tool-Karte und der verwaltete Editor übernehmen das Chinesisch-/Englisch-Lo
 Installieren Sie das öffentliche Plugin in eine authentifizierte DSH-Prerelease, ohne DSH global zu installieren:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > Das OpenPencil-Plugin ist öffentlich und benötigt kein npm-Token. Wenn die DSH-Prerelease selbst eine Registry-Authentifizierung erfordert, bewahren Sie diese Anmeldedaten in einer npm-Konfiguration auf Benutzer- oder temporärer Ebene außerhalb des Checkouts auf. Dieses Repository enthält bewusst keine Registry-Anmeldedaten.
@@ -149,7 +148,7 @@ Die Fallback-Erkennung von Jian verwendet `DSH_OPENPENCIL_JIAN`, einen bekannten
 DSH liefert für ein Client-Plugin nur `client.js` aus; daher werden die OpenPencil-ESM-SDK, ihr WASM und CanvasKit als explizite Same-Origin-Assets bereitgestellt:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 Der Sync-Befehl bevorzugt ein benachbartes `../openpencil`-Checkout (lokale Entwicklung) und greift andernfalls auf das eingebundene `vendor/openpencil`-Submodul zurück (CI und frische Klone). Überschreiben Sie es mit `OPENPENCIL_ROOT` oder `--openpencil-root`. Ein vollständiges vorgefertigtes Asset-Verzeichnis kann mit `DSH_OPENPENCIL_VIEWER_SOURCE` ausgewählt werden. Die Suche zur Laufzeit kann mit `DSH_OPENPENCIL_VIEWER_ASSET_DIR` überschrieben werden.
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## Build und Verifizieren
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-Builds erfordern Node 24.11 oder neuer. DSH-Host-/Client-Pakete sind Peer-Abhängigkeiten, die vom Ziel-DSH-Profil bereitgestellt werden. Build-Tools werden aus lokalen Dev-Abhängigkeiten, dem aktiven verlinkten DSH-Checkout oder einem installierten DSH-Quellbundle aufgelöst; mit `DSH_SOURCE_ROOT` kann ein Quell-Checkout explizit ausgewählt werden. Die Lockfile pinnt eigenständige öffentliche Build-Tools, wenn diese Umgebung separat bereitgestellt wird.
+Builds erfordern Node 24.11 oder neuer und pnpm. DSH-Host-/Client-Pakete sind Peer-Abhängigkeiten, die vom Ziel-DSH-Profil bereitgestellt werden. Build-Tools werden aus lokalen Dev-Abhängigkeiten, dem aktiven verlinkten DSH-Checkout oder einem installierten DSH-Quellbundle aufgelöst; mit `DSH_SOURCE_ROOT` kann ein Quell-Checkout explizit ausgewählt werden. Die Lockfile pinnt eigenständige öffentliche Build-Tools, wenn diese Umgebung separat bereitgestellt wird.
 
 Für eine private DSH-Prerelease bewahren Sie die ausgegebene npm-Anmeldeinformation außerhalb dieses Repositorys auf (zum Beispiel in einer `.npmrc` auf Benutzer- oder temporärer Ebene) und führen Sie die angeforderte Version direkt aus:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 Committen Sie niemals `.npmrc`, `NPM_TOKEN` oder kopierte Registry-Anmeldedaten. Dieses Repository ignoriert die lokale npm-Konfiguration standardmäßig.
@@ -251,7 +250,7 @@ DSH OpenPencil ist das DeepSeek-Harness-Plugin für **[OpenPencil](https://githu
 
 ## Mitwirken
 
-Beiträge sind willkommen! Forken und klonen Sie das Repository, erstellen Sie einen Branch, führen Sie `npm run build` und die Test-Suites aus, committen Sie mit [Conventional Commits](https://www.conventionalcommits.org/) und eröffnen Sie einen PR gegen `main`.
+Beiträge sind willkommen! Forken und klonen Sie das Repository, erstellen Sie einen Branch, führen Sie `pnpm run build` und die Test-Suites aus, committen Sie mit [Conventional Commits](https://www.conventionalcommits.org/) und eröffnen Sie einen PR gegen `main`.
 
 ## Community
 

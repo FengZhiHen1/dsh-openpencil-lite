@@ -108,9 +108,8 @@ DSH OpenPencil은 [DeepSeek Harness](https://github.com/deepseek-ai/DSH)와 [Ope
 DSH를 전역으로 설치하지 않고 인증된 DSH 프리릴리스에 공개 플러그인을 설치합니다:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > OpenPencil 플러그인은 공개되어 npm 토큰이 필요 없습니다. DSH 프리릴리스 자체가 레지스트리 인증을 요구하는 경우, 해당 자격 증명은 체크아웃 외부의 사용자 수준 또는 임시 npm 구성에 보관하세요. 이 저장소에는 의도적으로 레지스트리 자격 증명이 포함되어 있지 않습니다.
@@ -149,7 +148,7 @@ Jian 폴백 검색은 `DSH_OPENPENCIL_JIAN`, 알려진 로컬 릴리스 빌드, 
 DSH는 클라이언트 플러그인에 대해 `client.js`만 제공하므로, OpenPencil ESM SDK, 해당 WASM 및 CanvasKit은 명시적인 동일 출처 에셋으로 준비됩니다:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 동기화 명령은 형제 `../openpencil` 체크아웃(로컬 개발)을 우선 사용하며, 벤더링된 `vendor/openpencil` 서브모듈(CI 및 새 클론)로 폴백합니다. `OPENPENCIL_ROOT` 또는 `--openpencil-root`로 재정의할 수 있습니다. `DSH_OPENPENCIL_VIEWER_SOURCE`로 완전한 사전 빌드 에셋 디렉터리를 선택할 수 있으며, `DSH_OPENPENCIL_VIEWER_ASSET_DIR`로 런타임 조회를 재정의할 수 있습니다.
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## 빌드 및 검증
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-빌드에는 Node 24.11 이상이 필요합니다. DSH 호스트/클라이언트 패키지는 대상 DSH 프로필이 제공하는 피어 종속성입니다. 빌드 도구는 로컬 개발 종속성, 활성 연결된 DSH 체크아웃 또는 설치된 DSH 소스 번들에서 확인되며, `DSH_SOURCE_ROOT`로 소스 체크아웃을 명시적으로 선택할 수 있습니다. 잠금 파일(lockfile)은 해당 환경이 별도로 프로비저닝되는 경우 독립형 공개 빌드 도구를 고정합니다.
+빌드에는 Node 24.11 이상과 pnpm이 필요합니다. DSH 호스트/클라이언트 패키지는 대상 DSH 프로필이 제공하는 피어 종속성입니다. 빌드 도구는 로컬 개발 종속성, 활성 연결된 DSH 체크아웃 또는 설치된 DSH 소스 번들에서 확인되며, `DSH_SOURCE_ROOT`로 소스 체크아웃을 명시적으로 선택할 수 있습니다. 잠금 파일(lockfile)은 해당 환경이 별도로 프로비저닝되는 경우 독립형 공개 빌드 도구를 고정합니다.
 
 비공개 DSH 프리릴리스의 경우, 발급된 npm 자격 증명을 이 저장소 외부에 보관하고(예: 사용자 수준 또는 임시 `.npmrc`) 요청된 버전을 직접 실행하세요:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 `.npmrc`, `NPM_TOKEN` 또는 복사된 레지스트리 자격 증명을 절대 커밋하지 마세요. 이 저장소는 기본적으로 로컬 npm 구성을 무시합니다.
@@ -251,7 +250,7 @@ DSH OpenPencil은 세계 최초의 오픈소스 AI 네이티브 벡터 디자인
 
 ## 기여하기
 
-기여를 환영합니다! 포크하고 클론한 뒤 브랜치를 만들고, `npm run build`와 테스트 스위트를 실행하고, [Conventional Commits](https://www.conventionalcommits.org/)으로 커밋한 후 `main`에 PR을 열어 주세요.
+기여를 환영합니다! 포크하고 클론한 뒤 브랜치를 만들고, `pnpm run build`와 테스트 스위트를 실행하고, [Conventional Commits](https://www.conventionalcommits.org/)으로 커밋한 후 `main`에 PR을 열어 주세요.
 
 ## 커뮤니티
 
@@ -268,3 +267,4 @@ DSH OpenPencil은 세계 최초의 오픈소스 AI 네이티브 벡터 디자인
 [MIT](./LICENSE) — 저작권 (c) 2026 ZSeven-W
 
 타사 구성 요소는 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)에 나열되어 있습니다.
+

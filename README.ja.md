@@ -108,9 +108,8 @@ DSH OpenPencil は [DeepSeek Harness](https://github.com/deepseek-ai/DSH) と [O
 DSH をグローバルにインストールせずに、認証済みの DSH プレリリースへ公開プラグインをインストールします:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 \
-  dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 > OpenPencil プラグインは公開されており、npm トークンは不要です。DSH プレリリース自体にレジストリ認証が必要な場合は、その認証情報をチェックアウト外のユーザーレベルまたは一時的な npm 設定に保持してください。このリポジトリには意図的にレジストリの認証情報が含まれていません。
@@ -149,7 +148,7 @@ Jian フォールバックの検出は `DSH_OPENPENCIL_JIAN`、既知のロー�
 DSH はクライアントプラグインに `client.js` のみを配信するため、OpenPencil ESM SDK、その WASM、CanvasKit は明示的な同一オリジンのアセットとしてステージングされます:
 
 ```sh
-npm run sync:viewer-assets
+pnpm run sync:viewer-assets
 ```
 
 同期コマンドは、隣接する `../openpencil` チェックアウト（ローカル開発）を優先し、ベンダリングされた `vendor/openpencil` サブモジュール（CI と新規クローン）にフォールバックします。`OPENPENCIL_ROOT` または `--openpencil-root` で上書きできます。ビルド済みの完全なアセットディレクトリは `DSH_OPENPENCIL_VIEWER_SOURCE` で選択できます。ランタイムの参照先は `DSH_OPENPENCIL_VIEWER_ASSET_DIR` で上書きできます。
@@ -217,19 +216,19 @@ dsh-openpencil/
 ## ビルドと検証
 
 ```sh
-npm run sync:viewer-assets
-npm run build
-npm run test:viewer-assets
-npm run test:client
-npm run test:host -- /absolute/path/to/design.op 375 1091
+pnpm run sync:viewer-assets
+pnpm run build
+pnpm run test:viewer-assets
+pnpm run test:client
+pnpm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-ビルドには Node 24.11 以降が必要です。DSH のホスト/クライアントパッケージは、対象の DSH プロファイルが提供するピア依存関係です。ビルドツールは、ローカルの開発依存関係、アクティブなリンク済み DSH チェックアウト、またはインストール済みの DSH ソースバンドルから解決されます。`DSH_SOURCE_ROOT` でソースチェックアウトを明示的に選択できます。ロックファイルは、その環境が別途プロビジョニングされる場合に、スタンドアロンの公開ビルドツールを固定します。
+ビルドには Node 24.11 以降と pnpm が必要です。DSH のホスト/クライアントパッケージは、対象の DSH プロファイルが提供するピア依存関係です。ビルドツールは、ローカルの開発依存関係、アクティブなリンク済み DSH チェックアウト、またはインストール済みの DSH ソースバンドルから解決されます。`DSH_SOURCE_ROOT` でソースチェックアウトを明示的に選択できます。ロックファイルは、その環境が別途プロビジョニングされる場合に、スタンドアロンの公開ビルドツールを固定します。
 
 プライベートな DSH プレリリースでは、発行された npm 認証情報をこのリポジトリの外（たとえばユーザーレベルまたは一時的な `.npmrc`）に保持し、要求されたバージョンを直接実行してください:
 
 ```sh
-npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
+pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
 `.npmrc`、`NPM_TOKEN`、またはコピーしたレジストリ認証情報をコミットしないでください。このリポジトリはデフォルトでローカルの npm 設定を無視します。
@@ -251,7 +250,7 @@ DSH OpenPencil は **[OpenPencil](https://github.com/ZSeven-W/openpencil)** — 
 
 ## コントリビューション
 
-コントリビューションを歓迎します！フォークしてクローンし、ブランチを作成し、`npm run build` とテストスイートを実行し、[Conventional Commits](https://www.conventionalcommits.org/) に従ってコミットし、`main` に対して PR を開いてください。
+コントリビューションを歓迎します！フォークしてクローンし、ブランチを作成し、`pnpm run build` とテストスイートを実行し、[Conventional Commits](https://www.conventionalcommits.org/) に従ってコミットし、`main` に対して PR を開いてください。
 
 ## コミュニティ
 

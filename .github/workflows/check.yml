@@ -3,7 +3,8 @@ name: Plugin check
 # Full pipeline on every PR and push to main: builds the op-web-sdk
 # wasm-bindgen pkg inside the vendored OpenPencil submodule
 # (vendor/openpencil), syncs the DSH viewer assets, builds the TypeScript
-# plugin, and runs every test suite.
+# plugin, and runs every test suite. Package management is pnpm
+# (packageManager field pins the version; pnpm/action-setup reads it).
 #
 # The op-web-sdk pkg (crates/op-web-sdk/pkg) is a BUILD ARTIFACT — it is not
 # committed to any OpenPencil branch — so this workflow mirrors openpencil's
@@ -30,12 +31,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: npm
+          cache: pnpm
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94'
@@ -65,14 +67,14 @@ jobs:
           cargo build -p op-web-sdk --target wasm32-unknown-unknown --features canvaskit --release
           wasm-bindgen --target web --out-dir crates/op-web-sdk/pkg target/wasm32-unknown-unknown/release/op_web_sdk.wasm
       - name: Sync viewer assets
-        run: npm run sync:viewer-assets
+        run: pnpm run sync:viewer-assets
       - name: Build
-        run: npm run build
+        run: pnpm run build
       - name: Test viewer assets
-        run: npm run test:viewer-assets
+        run: pnpm run test:viewer-assets
       - name: Test client
-        run: npm run test:client
+        run: pnpm run test:client
       - name: Test host API
-        run: npm run test:host-api
+        run: pnpm run test:host-api
       - name: Test MCP client
-        run: npm run test:mcp
+        run: pnpm run test:mcp
