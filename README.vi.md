@@ -58,14 +58,14 @@ Trình xuất headless của OpenPencil được cài đặt sẽ kết xuất c
 
 ### ✏️ Trình biên tập Quản lý
 
-Với editable: true, hành động chỉnh sửa sẽ mở trình biên tập OpenPencil được quản lý — chọn đối tượng, lớp, thuộc tính, công cụ vẽ, hoàn tác/làm lại và ngữ nghĩa lưu tường minh — trong một khu làm việc bên phải có thể thay đổi kích thước kèm tùy chọn toàn màn hình.
+Với `editable: true`, hành động chỉnh sửa sẽ mở trình biên tập OpenPencil được quản lý — chọn đối tượng, lớp, thuộc tính, công cụ vẽ, hoàn tác/làm lại và ngữ nghĩa lưu tường minh — trong một khu làm việc bên phải có thể thay đổi kích thước kèm tùy chọn toàn màn hình.
 
 </td>
 <td width="50%">
 
 ### 🤖 Công cụ Thiết kế dành riêng cho Agent
 
-Năm công cụ — openpencil_new, openpencil_create, openpencil_edit, openpencil_render, openpencil_selection — cho phép Agent tạo, sửa đổi và đọc một canvas thực thông qua các chương trình batch_design giao dịch.
+Năm công cụ — `openpencil_new`, `openpencil_create`, `openpencil_edit`, `openpencil_render`, `openpencil_selection` — cho phép Agent tạo, sửa đổi và đọc một canvas thực thông qua các chương trình `batch_design` giao dịch.
 
 </td>
 </tr>
@@ -81,7 +81,7 @@ Các quyền truy cập hình ảnh và tài liệu là các capability được
 
 ### ⚡ An toàn Giao dịch
 
-Một tài liệu mới chỉ được công bố sau khi toàn bộ chương trình batch_design thành công. Công cụ không bao giờ ghi đè một đường dẫn đã tồn tại, một batch thất bại không để lại tệp rỗng nào, và việc lưu sử dụng một băm lạc quan với thay thế nguyên tử.
+Một tài liệu mới chỉ được công bố sau khi toàn bộ chương trình `batch_design` thành công. Công cụ không bao giờ ghi đè một đường dẫn đã tồn tại, một batch thất bại không để lại tệp rỗng nào, và việc lưu sử dụng một băm lạc quan với thay thế nguyên tử.
 
 </td>
 </tr>
@@ -119,34 +119,34 @@ npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
 
 | Công cụ | Chức năng |
 | --- | --- |
-| openpencil_new | Tạo một tệp .op hoàn toàn mới từ một chương trình batch_design giao dịch, lưu nó một cách nguyên tử qua hệ thống tệp sandbox của DSH và không yêu cầu trình biên tập mở sẵn. |
-| openpencil_create | Áp dụng một chương trình batch_design giao dịch để tạo hoặc tái cấu trúc các nút trên một canvas trực tiếp hiện có. |
-| openpencil_edit | Sửa đổi một nút tường minh hoặc nút duy nhất do người dùng chọn. |
-| openpencil_render | Tạo một ảnh chụp .op bất biến, định địa chỉ theo nội dung và kết xuất mọi khung cấp cao nhất trên trang đang hoạt động — scale và editable tùy chọn. |
-| openpencil_selection | Đọc chính xác các nút đang được chọn trong canvas của trình biên tập trực tiếp. |
+| `openpencil_new` | Tạo một tệp `.op` hoàn toàn mới từ một chương trình `batch_design` giao dịch, lưu nó một cách nguyên tử qua hệ thống tệp sandbox của DSH và không yêu cầu trình biên tập mở sẵn. |
+| `openpencil_create` | Áp dụng một chương trình `batch_design` giao dịch để tạo hoặc tái cấu trúc các nút trên một canvas trực tiếp hiện có. |
+| `openpencil_edit` | Sửa đổi một nút tường minh hoặc nút duy nhất do người dùng chọn. |
+| `openpencil_render` | Tạo một ảnh chụp `.op` bất biến, định địa chỉ theo nội dung và kết xuất mọi khung cấp cao nhất trên trang đang hoạt động — `scale` và `editable` tùy chọn. |
+| `openpencil_selection` | Đọc chính xác các nút đang được chọn trong canvas của trình biên tập trực tiếp. |
 
 ## Quy trình Thiết kế của Agent
 
-Với một yêu cầu ngôn ngữ tự nhiên không kèm tài liệu hiện có, Agent nên gọi openpencil_new với một đường dẫn .op mới tương đối với workspace và chương trình batch_design hoàn chỉnh đầu tiên. Công cụ chạy chương trình đó trong một daemon OpenPencil được quản lý riêng tư và chỉ công bố tài liệu có thẩm quyền sau khi toàn bộ batch thành công. Nó không bao giờ ghi đè một đường dẫn đã tồn tại và một batch thất bại không để lại tệp rỗng nào. Agent sau đó nên gọi openpencil_render với đường dẫn được trả về, editable: true và autoOpen: true để trình bày thư viện ảnh và mở rộng trình biên tập một lần. Các thẻ lịch sử được phát lại hoặc được kết xuất ban đầu không bao giờ tự mở.
+Với một yêu cầu ngôn ngữ tự nhiên không kèm tài liệu hiện có, Agent nên gọi `openpencil_new` với một đường dẫn `.op` mới tương đối với workspace và chương trình `batch_design` hoàn chỉnh đầu tiên. Công cụ chạy chương trình đó trong một daemon OpenPencil được quản lý riêng tư và chỉ công bố tài liệu có thẩm quyền sau khi toàn bộ batch thành công. Nó không bao giờ ghi đè một đường dẫn đã tồn tại và một batch thất bại không để lại tệp rỗng nào. Agent sau đó nên gọi `openpencil_render` với đường dẫn được trả về, `editable: true` và `autoOpen: true` để trình bày thư viện ảnh và mở rộng trình biên tập một lần. Các thẻ lịch sử được phát lại hoặc được kết xuất ban đầu không bao giờ tự mở.
 
-Chỉ dùng openpencil_create và openpencil_edit cho một canvas trực tiếp hiện có. Các chỉnh sửa của chúng vẫn chưa được lưu cho đến khi hành động Lưu của trình biên tập được thực hiện.
+Chỉ dùng `openpencil_create` và `openpencil_edit` cho một canvas trực tiếp hiện có. Các chỉnh sửa của chúng vẫn chưa được lưu cho đến khi hành động Lưu của trình biên tập được thực hiện.
 
 ## Hợp đồng Kết xuất
 
-openpencil_render chấp nhận một đường dẫn .op, tham số scale tùy chọn (`0 < scale <= 8`, mặc định 1) và tham số editable tùy chọn (mặc định false). Để trống width và height cho đường dẫn OpenPencil chính xác: chúng mô tả một viewport lúc chạy, không phải kích thước xuất thiết kế, và chỉ được chấp nhận bởi dự phòng Jian có độ trung thực thấp hơn.
+`openpencil_render` chấp nhận một đường dẫn `.op`, tham số `scale` tùy chọn (`0 < scale <= 8`, mặc định `1`) và tham số `editable` tùy chọn (mặc định `false`). Để trống `width` và `height` cho đường dẫn OpenPencil chính xác: chúng mô tả một viewport lúc chạy, không phải kích thước xuất thiết kế, và chỉ được chấp nhận bởi dự phòng Jian có độ trung thực thấp hơn.
 
 Việc tìm kiếm nhị phân OpenPencil kiểm tra theo thứ tự:
 
-1. DSH_OPENPENCIL_BINARY hoặc DSH_OPENPENCIL_DESKTOP
-2. /Applications/OpenPencil.app/Contents/MacOS/openpencil-desktop
-3. ~/Applications/OpenPencil.app/Contents/MacOS/openpencil-desktop
-4. openpencil-desktop trong PATH
+1. `DSH_OPENPENCIL_BINARY` hoặc `DSH_OPENPENCIL_DESKTOP`
+2. `/Applications/OpenPencil.app/Contents/MacOS/openpencil-desktop`
+3. `~/Applications/OpenPencil.app/Contents/MacOS/openpencil-desktop`
+4. `openpencil-desktop` trong `PATH`
 
-Việc tìm kiếm dự phòng Jian sử dụng DSH_OPENPENCIL_JIAN, một bản build phát hành cục bộ đã biết, rồi đến PATH. Nếu nhị phân OpenPencil chính xác thực sự không khả dụng, Jian có thể tạo ra dự phòng runtime-preview được gắn nhãn rõ ràng. Các lỗi kết xuất chính xác, hết thời gian chờ và PNG không hợp lệ không tự động chuyển sang dự phòng một cách âm thầm.
+Việc tìm kiếm dự phòng Jian sử dụng `DSH_OPENPENCIL_JIAN`, một bản build phát hành cục bộ đã biết, rồi đến `PATH`. Nếu nhị phân OpenPencil chính xác thực sự không khả dụng, Jian có thể tạo ra dự phòng `runtime-preview` được gắn nhãn rõ ràng. Các lỗi kết xuất chính xác, hết thời gian chờ và PNG không hợp lệ không tự động chuyển sang dự phòng một cách âm thầm.
 
 ## Tài nguyên Web Viewer
 
-DSH chỉ phục vụ client.js cho một client plugin, vì vậy SDK ESM của OpenPencil, WASM của nó và CanvasKit được đưa vào làm các tài nguyên cùng nguồn gốc tường minh:
+DSH chỉ phục vụ `client.js` cho một client plugin, vì vậy SDK ESM của OpenPencil, WASM của nó và CanvasKit được đưa vào làm các tài nguyên cùng nguồn gốc tường minh:
 
 ```sh
 npm run sync:viewer-assets
@@ -158,37 +158,37 @@ Tài nguyên viewer chỉ được tải trễ sau khi người dùng mở canva
 
 ## Trình biên tập Quản lý
 
-Các phiên có thể chỉnh sửa sử dụng web host được quản lý của OpenPencil — cùng kiến trúc được op-vscode sử dụng. Plugin chỉ khởi động host sau một hành động người dùng được ủy quyền, giữ token daemon trong bộ nhớ, xác thực nguồn và origin của iframe, và đóng tiến trình khi phiên trình biên tập kết thúc. Bề mặt trình biên tập được chọn dần: chi tiết Tool gốc khi host khai báo ranh giới đó, nếu không thì là khu làm việc bên phải của plugin với các điều khiển thay đổi kích thước và toàn màn hình.
+Các phiên có thể chỉnh sửa sử dụng web host được quản lý của OpenPencil — cùng kiến trúc được `op-vscode` sử dụng. Plugin chỉ khởi động host sau một hành động người dùng được ủy quyền, giữ token daemon trong bộ nhớ, xác thực nguồn và origin của iframe, và đóng tiến trình khi phiên trình biên tập kết thúc. Bề mặt trình biên tập được chọn dần: chi tiết Tool gốc khi host khai báo ranh giới đó, nếu không thì là khu làm việc bên phải của plugin với các điều khiển thay đổi kích thước và toàn màn hình.
 
-Nếu DSH tải lại hoặc gỡ plugin trong khi canvas đang có thay đổi chưa lưu, host giữ một bản nháp phục hồi cục bộ không thể đọc được trong tối đa bảy ngày. Việc mở lại cùng nguồn đó sẽ hỏi trước khi khôi phục nó vào canvas trực tiếp; phục hồi không bao giờ ghi đè tệp .op cho đến khi người dùng lưu một cách tường minh.
+Nếu DSH tải lại hoặc gỡ plugin trong khi canvas đang có thay đổi chưa lưu, host giữ một bản nháp phục hồi cục bộ không thể đọc được trong tối đa bảy ngày. Việc mở lại cùng nguồn đó sẽ hỏi trước khi khôi phục nó vào canvas trực tiếp; phục hồi không bao giờ ghi đè tệp `.op` cho đến khi người dùng lưu một cách tường minh.
 
 Việc tìm kiếm nhị phân và nguồn có thể được ghi đè bằng:
 
-- DSH_OPENPENCIL_EDITOR_BINARY cho op-host-web-server;
-- DSH_OPENPENCIL_SOURCE_ROOT (hoặc OPENPENCIL_SOURCE_ROOT) cho web bundle và các tài nguyên CanvasKit.
+- `DSH_OPENPENCIL_EDITOR_BINARY` cho `op-host-web-server`;
+- `DSH_OPENPENCIL_SOURCE_ROOT` (hoặc `OPENPENCIL_SOURCE_ROOT`) cho web bundle và các tài nguyên CanvasKit.
 
 Việc lưu sử dụng một băm nguồn lạc quan, một thay thế nguyên tử và một capability kế thừa. Nếu nguồn thay đổi bên ngoài trình biên tập, plugin báo cáo một xung đột thay vì ghi đè nó.
 
 ## Siêu dữ liệu Kết quả
 
-Kết quả hiển thị cho mô hình vẫn là JSON thuần. presentationMeta.$dshOpenPencil chỉ dành cho trình duyệt mang các quyền truy cập bổ sung cho:
+Kết quả hiển thị cho mô hình vẫn là JSON thuần. `presentationMeta.$dshOpenPencil` chỉ dành cho trình duyệt mang các quyền truy cập bổ sung cho:
 
-- image: đường dẫn PNG, URL xem trước/tải xuống và width/height thực;
-- frames: mọi khung cấp cao nhất được kết xuất chính xác theo thứ tự trang đang hoạt động, bao gồm id/tên/chỉ mục nút và các URL PNG đã ký;
-- document: đường dẫn hành động nguồn cùng URL ảnh chụp bất biến, số byte và SHA-256;
-- viewer: các URL SDK/WASM/CanvasKit theo phiên bản khi route tài nguyên được gắn;
-- editor: các capability khởi chạy/làm mới có phạm vi khi editable: true được ủy quyền.
+- `image`: đường dẫn PNG, URL xem trước/tải xuống và width/height thực;
+- `frames`: mọi khung cấp cao nhất được kết xuất chính xác theo thứ tự trang đang hoạt động, bao gồm id/tên/chỉ mục nút và các URL PNG đã ký;
+- `document`: đường dẫn hành động nguồn cùng URL ảnh chụp bất biến, số byte và SHA-256;
+- `viewer`: các URL SDK/WASM/CanvasKit theo phiên bản khi route tài nguyên được gắn;
+- `editor`: các capability khởi chạy/làm mới có phạm vi khi `editable: true` được ủy quyền.
 
-Kết quả cũng ghi lại renderer, rendererBinary, fidelity và mọi cảnh báo. Các thông điệp schema-v1 chỉ có PNG hiện có vẫn có thể được kết xuất.
+Kết quả cũng ghi lại `renderer`, `rendererBinary`, `fidelity` và mọi cảnh báo. Các thông điệp schema-v1 chỉ có PNG hiện có vẫn có thể được kết xuất.
 
-DSH 0.1.0-rc.6 không lưu trữ siêu dữ liệu trình bày của trình duyệt cho các công cụ nằm lồng bên dưới PTC/Code Mode. Plugin khôi phục phép chiếu UI-only đó qua một endpoint same-origin, session-bound: trình duyệt chỉ gửi session id, call id và SHA-256 bất biến của tài liệu, trong khi host phân giải kết quả có thẩm quyền từ nhật ký phiên DSH bền vững và chỉ sử dụng một marker trong tiến trình có thời hạn ngắn để ủy quyền cho việc chỉnh sửa trực tiếp gần đây. Các capability xem trước/biên tập được ký không bao giờ đi vào kết quả công cụ chuẩn hoặc ngữ cảnh mô hình. Lịch sử bền vững có thể khôi phục các bản xem trước chỉ đọc; các quyền truy cập biên tập chỉ được cấp cho các kết quả trực tiếp gần đây, đáng tin cậy.
+DSH `0.1.0-rc.6` không lưu trữ siêu dữ liệu trình bày của trình duyệt cho các công cụ nằm lồng bên dưới PTC/Code Mode. Plugin khôi phục phép chiếu UI-only đó qua một endpoint same-origin, session-bound: trình duyệt chỉ gửi session id, call id và SHA-256 bất biến của tài liệu, trong khi host phân giải kết quả có thẩm quyền từ nhật ký phiên DSH bền vững và chỉ sử dụng một marker trong tiến trình có thời hạn ngắn để ủy quyền cho việc chỉnh sửa trực tiếp gần đây. Các capability xem trước/biên tập được ký không bao giờ đi vào kết quả công cụ chuẩn hoặc ngữ cảnh mô hình. Lịch sử bền vững có thể khôi phục các bản xem trước chỉ đọc; các quyền truy cập biên tập chỉ được cấp cho các kết quả trực tiếp gần đây, đáng tin cậy.
 
 Đối với phát lại có giới hạn, việc phục hồi siêu dữ liệu lồng nhau chấp nhận tối đa 128 khung cấp cao nhất; các kết quả Code Mode lớn hơn vẫn khả dụng qua dự phòng JSON chuẩn của chúng.
 
 ## Giới hạn Hiện tại
 
 - Các chỉnh sửa tiếp theo trên một canvas hiện có yêu cầu một trình biên tập quản lý đã được mở. Thay đổi vẫn chưa được lưu cho đến khi người dùng gọi hành động Lưu của nó.
-- Canvas của Web SDK nhẹ chỉ đọc; chỉnh sửa đầy đủ sử dụng bề mặt trình biên tập quản lý riêng. Trên DSH 0.1.0-rc.6, plugin sử dụng khu làm việc bên phải có thể thay đổi kích thước kèm tùy chọn toàn màn hình.
+- Canvas của Web SDK nhẹ chỉ đọc; chỉnh sửa đầy đủ sử dụng bề mặt trình biên tập quản lý riêng. Trên DSH `0.1.0-rc.6`, plugin sử dụng khu làm việc bên phải có thể thay đổi kích thước kèm tùy chọn toàn màn hình.
 - Thư viện ảnh chính xác bao phủ các khung cấp cao nhất trên trang đang hoạt động; canvas tương tác vẫn là cách để kiểm tra các trang không hoạt động và các nút lồng nhau.
 - Các bộ nhớ đệm kết xuất và ảnh chụp vẫn cần một chính sách lưu giữ ở cấp sản phẩm.
 
@@ -224,17 +224,17 @@ npm run test:client
 npm run test:host -- /absolute/path/to/design.op 375 1091
 ```
 
-Việc xây dựng yêu cầu Node 24.11 trở lên. Các gói host/client của DSH là các peer dependency do hồ sơ DSH mục tiêu cung cấp. Các công cụ xây dựng được phân giải từ dev dependencies cục bộ, thư mục checkout DSH đã liên kết đang hoạt động hoặc một bundle nguồn DSH đã cài đặt; DSH_SOURCE_ROOT có thể chọn một checkout nguồn một cách tường minh. Lockfile cố định các công cụ xây dựng công khai độc lập khi môi trường đó được cấp phát riêng biệt.
+Việc xây dựng yêu cầu Node 24.11 trở lên. Các gói host/client của DSH là các peer dependency do hồ sơ DSH mục tiêu cung cấp. Các công cụ xây dựng được phân giải từ dev dependencies cục bộ, thư mục checkout DSH đã liên kết đang hoạt động hoặc một bundle nguồn DSH đã cài đặt; `DSH_SOURCE_ROOT` có thể chọn một checkout nguồn một cách tường minh. Lockfile cố định các công cụ xây dựng công khai độc lập khi môi trường đó được cấp phát riêng biệt.
 
-Đối với một bản prerelease riêng tư của DSH, hãy giữ thông tin xác thực npm được cấp bên ngoài kho lưu trữ này (ví dụ trong một .npmrc cấp người dùng hoặc tạm thời) và chạy trực tiếp phiên bản được yêu cầu:
+Đối với một bản prerelease riêng tư của DSH, hãy giữ thông tin xác thực npm được cấp bên ngoài kho lưu trữ này (ví dụ trong một `.npmrc` cấp người dùng hoặc tạm thời) và chạy trực tiếp phiên bản được yêu cầu:
 
 ```sh
 npx --yes -p @deepseek-ai/dsh@0.1.0-rc.6 dsh web
 ```
 
-Không bao giờ commit .npmrc, NPM_TOKEN hoặc thông tin xác thực registry được sao chép. Kho lưu trữ này mặc định bỏ qua cấu hình npm cục bộ.
+Không bao giờ commit `.npmrc`, `NPM_TOKEN` hoặc thông tin xác thực registry được sao chép. Kho lưu trữ này mặc định bỏ qua cấu hình npm cục bộ.
 
-test:host thực hiện một kết xuất chính xác thực, xác thực hình học PNG IHDR và SHA-256, kiểm tra các capability hình ảnh/tài liệu bất biến qua HTTP và xác nhận rằng tài nguyên viewer có thể được cấp quyền. Các kích thước mong đợi phụ thuộc vào fixture.
+`test:host` thực hiện một kết xuất chính xác thực, xác thực hình học PNG IHDR và SHA-256, kiểm tra các capability hình ảnh/tài liệu bất biến qua HTTP và xác nhận rằng tài nguyên viewer có thể được cấp quyền. Các kích thước mong đợi phụ thuộc vào fixture.
 
 ## Hệ sinh thái
 
@@ -242,16 +242,16 @@ DSH OpenPencil là plugin DeepSeek Harness dành cho **[OpenPencil](https://gith
 
 | Dự án | Mô tả |
 | ------- | ---------- |
-| **[OpenPencil](https://github.com/ZSeven-W/openpencil)** | Công cụ thiết kế mà plugin này điều khiển — tạo canvas từ lời nhắc, các nhóm agent đồng thời, tệp .op thiết kế dạng mã và một máy chủ MCP tích hợp. Các bản xem trước chính xác, canvas tương tác và trình biên tập quản lý ở đây đều do chính OpenPencil cung cấp sức mạnh. |
-| **[agent-rs](https://github.com/ZSeven-W/agent-rs)** | Một runtime async thuần Rust để vận hành các agent LLM — đa nhà cung cấp, hỗ trợ công cụ đầu cuối, quyền có cấu trúc, MCP thực, không một chút unsafe nào. Cung cấp sức mạnh cho runtime agent tích hợp của OpenPencil. |
+| **[OpenPencil](https://github.com/ZSeven-W/openpencil)** | Công cụ thiết kế mà plugin này điều khiển — tạo canvas từ lời nhắc, các nhóm agent đồng thời, tệp `.op` thiết kế dạng mã và một máy chủ MCP tích hợp. Các bản xem trước chính xác, canvas tương tác và trình biên tập quản lý ở đây đều do chính OpenPencil cung cấp sức mạnh. |
+| **[agent-rs](https://github.com/ZSeven-W/agent-rs)** | Một runtime async thuần Rust để vận hành các agent LLM — đa nhà cung cấp, hỗ trợ công cụ đầu cuối, quyền có cấu trúc, MCP thực, không một chút `unsafe` nào. Cung cấp sức mạnh cho runtime agent tích hợp của OpenPencil. |
 | **[jian](https://github.com/ZSeven-W/jian)** | Khung giao diện UI thuần Rust, GPU-Skia — widgets, bố cục, sự kiện và hot reload trong một stack duy nhất. Là khung UI của OpenPencil và nguồn gốc của trình kết xuất dự phòng của plugin này. |
 | **[Zode](https://github.com/ZSeven-W/zode)** | Trợ lý lập trình AI-native mã nguồn mở cho terminal của bạn — đọc mã của bạn, chạy lệnh và điều khiển OpenPencil qua MCP. |
 | **[noema](https://github.com/ZSeven-W/noema)** | Hệ thống bộ nhớ local-first, phi vector cho các agent lập trình — bộ nhớ bền vững dưới dạng các tệp có thể kiểm tra, hoạt động trên nhiều runtime. |
-| **[openpencil-skill](https://github.com/ZSeven-W/openpencil-skill)** | Plugin skill LLM dạy các agent AI cách thiết kế bằng op — một người bạn đồng hành của plugin DSH này. |
+| **[openpencil-skill](https://github.com/ZSeven-W/openpencil-skill)** | Plugin skill LLM dạy các agent AI cách thiết kế bằng `op` — một người bạn đồng hành của plugin DSH này. |
 
 ## Đóng góp
 
-Rất hoan nghênh các đóng góp! Hãy fork và clone, tạo một nhánh, chạy npm run build và các bộ kiểm thử, commit theo [Conventional Commits](https://www.conventionalcommits.org/) và mở một PR tới nhánh main.
+Rất hoan nghênh các đóng góp! Hãy fork và clone, tạo một nhánh, chạy `npm run build` và các bộ kiểm thử, commit theo [Conventional Commits](https://www.conventionalcommits.org/) và mở một PR tới nhánh `main`.
 
 ## Cộng đồng
 
