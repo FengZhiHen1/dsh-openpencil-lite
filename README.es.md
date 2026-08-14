@@ -152,7 +152,7 @@ DSH solo sirve `client.js` para un plugin de cliente, por lo que el SDK ESM de O
 npm run sync:viewer-assets
 ```
 
-El comando de sincronización usa por defecto un checkout hermano `../openpencil`. Puedes anularlo con `OPENPENCIL_ROOT` o `--openpencil-root`. Se puede seleccionar un directorio de recursos precompilado completo con `DSH_OPENPENCIL_VIEWER_SOURCE`. La búsqueda en tiempo de ejecución se puede anular con `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
+El comando de sincronización prefiere un checkout hermano `../openpencil` (desarrollo local), recurriendo al submódulo vendored `vendor/openpencil` (CI y clones nuevos). Puedes anularlo con `OPENPENCIL_ROOT` o `--openpencil-root`. Se puede seleccionar un directorio de recursos precompilado completo con `DSH_OPENPENCIL_VIEWER_SOURCE`. La búsqueda en tiempo de ejecución se puede anular con `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
 
 Los recursos del visor se cargan de forma diferida solo después de que el usuario abre el lienzo. Si faltan o no son válidos, la vista previa PNG sigue disponible y no se anuncia ningún botón de lienzo.
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

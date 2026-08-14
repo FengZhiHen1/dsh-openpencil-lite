@@ -152,7 +152,7 @@ DSH는 클라이언트 플러그인에 대해 `client.js`만 제공하므로, Op
 npm run sync:viewer-assets
 ```
 
-동기화 명령은 기본적으로 형제 `../openpencil` 체크아웃을 사용합니다. `OPENPENCIL_ROOT` 또는 `--openpencil-root`로 재정의할 수 있습니다. `DSH_OPENPENCIL_VIEWER_SOURCE`로 완전한 사전 빌드 에셋 디렉터리를 선택할 수 있으며, `DSH_OPENPENCIL_VIEWER_ASSET_DIR`로 런타임 조회를 재정의할 수 있습니다.
+동기화 명령은 형제 `../openpencil` 체크아웃(로컬 개발)을 우선 사용하며, 벤더링된 `vendor/openpencil` 서브모듈(CI 및 새 클론)로 폴백합니다. `OPENPENCIL_ROOT` 또는 `--openpencil-root`로 재정의할 수 있습니다. `DSH_OPENPENCIL_VIEWER_SOURCE`로 완전한 사전 빌드 에셋 디렉터리를 선택할 수 있으며, `DSH_OPENPENCIL_VIEWER_ASSET_DIR`로 런타임 조회를 재정의할 수 있습니다.
 
 뷰어 에셋은 사용자가 캔버스를 연 후에만 지연 로드됩니다. 에셋이 없거나 유효하지 않으면 PNG 미리보기를 계속 사용할 수 있으며 캔버스 버튼은 표시되지 않습니다.
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

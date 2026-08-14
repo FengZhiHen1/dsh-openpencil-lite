@@ -152,7 +152,7 @@ DSH chỉ phục vụ <code>client.js</code> cho một client plugin, vì vậy 
 npm run sync:viewer-assets
 ```
 
-Lệnh sync mặc định dùng thư mục checkout <code>../openpencil</code> liền kề. Ghi đè nó bằng <code>OPENPENCIL_ROOT</code> hoặc <code>--openpencil-root</code>. Một thư mục tài nguyên đã được dựng sẵn hoàn chỉnh có thể được chọn bằng <code>DSH_OPENPENCIL_VIEWER_SOURCE</code>. Việc tra cứu lúc chạy có thể được ghi đè bằng <code>DSH_OPENPENCIL_VIEWER_ASSET_DIR</code>.
+Lệnh sync ưu tiên dùng thư mục checkout <code>../openpencil</code> liền kề (phát triển cục bộ), rồi dự phòng sang submodule <code>vendor/openpencil</code> được đưa vào kho (CI và các bản clone mới). Ghi đè nó bằng <code>OPENPENCIL_ROOT</code> hoặc <code>--openpencil-root</code>. Một thư mục tài nguyên đã được dựng sẵn hoàn chỉnh có thể được chọn bằng <code>DSH_OPENPENCIL_VIEWER_SOURCE</code>. Việc tra cứu lúc chạy có thể được ghi đè bằng <code>DSH_OPENPENCIL_VIEWER_ASSET_DIR</code>.
 
 Tài nguyên viewer chỉ được tải trễ sau khi người dùng mở canvas. Nếu chúng vắng mặt hoặc không hợp lệ, bản xem trước PNG vẫn khả dụng và không có nút canvas nào được quảng bá.
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

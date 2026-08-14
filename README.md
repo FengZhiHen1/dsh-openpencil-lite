@@ -152,7 +152,7 @@ DSH serves only `client.js` for a client plugin, so the OpenPencil ESM SDK, its 
 npm run sync:viewer-assets
 ```
 
-The sync command defaults to a sibling `../openpencil` checkout. Override it with `OPENPENCIL_ROOT` or `--openpencil-root`. A complete prebuilt asset directory can be selected with `DSH_OPENPENCIL_VIEWER_SOURCE`. Runtime lookup can be overridden with `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
+The sync command prefers a sibling `../openpencil` checkout (local development), falling back to the vendored `vendor/openpencil` submodule (CI and fresh clones). Override it with `OPENPENCIL_ROOT` or `--openpencil-root`. A complete prebuilt asset directory can be selected with `DSH_OPENPENCIL_VIEWER_SOURCE`. Runtime lookup can be overridden with `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
 
 Viewer assets are lazy-loaded only after the user opens the canvas. If they are absent or invalid, PNG preview remains available and no canvas button is advertised.
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

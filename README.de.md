@@ -152,7 +152,7 @@ DSH liefert für ein Client-Plugin nur `client.js` aus; daher werden die OpenPen
 npm run sync:viewer-assets
 ```
 
-Der Sync-Befehl verwendet standardmäßig ein benachbartes `../openpencil`-Checkout. Überschreiben Sie es mit `OPENPENCIL_ROOT` oder `--openpencil-root`. Ein vollständiges vorgefertigtes Asset-Verzeichnis kann mit `DSH_OPENPENCIL_VIEWER_SOURCE` ausgewählt werden. Die Suche zur Laufzeit kann mit `DSH_OPENPENCIL_VIEWER_ASSET_DIR` überschrieben werden.
+Der Sync-Befehl bevorzugt ein benachbartes `../openpencil`-Checkout (lokale Entwicklung) und greift andernfalls auf das eingebundene `vendor/openpencil`-Submodul zurück (CI und frische Klone). Überschreiben Sie es mit `OPENPENCIL_ROOT` oder `--openpencil-root`. Ein vollständiges vorgefertigtes Asset-Verzeichnis kann mit `DSH_OPENPENCIL_VIEWER_SOURCE` ausgewählt werden. Die Suche zur Laufzeit kann mit `DSH_OPENPENCIL_VIEWER_ASSET_DIR` überschrieben werden.
 
 Viewer-Assets werden erst nachgeladen, nachdem der Benutzer die Leinwand geöffnet hat. Sind sie nicht vorhanden oder ungültig, bleibt die PNG-Vorschau verfügbar und es wird kein Leinwand-Button angezeigt.
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

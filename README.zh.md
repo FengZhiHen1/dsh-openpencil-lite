@@ -152,7 +152,7 @@ DSH 仅为客户端插件提供 `client.js`，因此 OpenPencil ESM SDK、其 WA
 npm run sync:viewer-assets
 ```
 
-同步命令默认使用同级目录下的 `../openpencil` 检出。可通过 `OPENPENCIL_ROOT` 或 `--openpencil-root` 覆盖。可通过 `DSH_OPENPENCIL_VIEWER_SOURCE` 选择完整的预构建资源目录。可通过 `DSH_OPENPENCIL_VIEWER_ASSET_DIR` 覆盖运行时查找。
+同步命令优先使用同级目录下的 `../openpencil` 检出（本地开发），回退到随附的 `vendor/openpencil` 子模块（CI 与全新克隆）。可通过 `OPENPENCIL_ROOT` 或 `--openpencil-root` 覆盖。可通过 `DSH_OPENPENCIL_VIEWER_SOURCE` 选择完整的预构建资源目录。可通过 `DSH_OPENPENCIL_VIEWER_ASSET_DIR` 覆盖运行时查找。
 
 查看器资源仅在用户打开画布后才按需加载。如果这些资源缺失或无效，PNG 预览仍然可用，并且不会展示画布按钮。
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

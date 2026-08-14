@@ -152,7 +152,7 @@ DSH क्लाइंट प्लगइन के लिए केवल `clie
 npm run sync:viewer-assets
 ```
 
-सिंक कमांड डिफ़ॉल्ट रूप से एक सहोदर `../openpencil` चेकआउट का उपयोग करता है। इसे `OPENPENCIL_ROOT` या `--openpencil-root` से ओवरराइड करें। `DSH_OPENPENCIL_VIEWER_SOURCE` से एक संपूर्ण पूर्व-निर्मित एसेट निर्देशिका चुनी जा सकती है। `DSH_OPENPENCIL_VIEWER_ASSET_DIR` से रनटाइम लुकअप को ओवरराइड किया जा सकता है।
+सिंक कमांड एक सहोदर `../openpencil` चेकआउट को प्राथमिकता देता है (स्थानीय विकास), वेंडर किए गए `vendor/openpencil` सबमॉड्यूल (CI और नई क्लोन) पर फ़ॉलबैक करता है। इसे `OPENPENCIL_ROOT` या `--openpencil-root` से ओवरराइड करें। `DSH_OPENPENCIL_VIEWER_SOURCE` से एक संपूर्ण पूर्व-निर्मित एसेट निर्देशिका चुनी जा सकती है। `DSH_OPENPENCIL_VIEWER_ASSET_DIR` से रनटाइम लुकअप को ओवरराइड किया जा सकता है।
 
 व्यूअर एसेट उपयोगकर्ता के कैनवास खोलने के बाद ही आलसी-लोड होती हैं। यदि वे अनुपस्थित या अमान्य हैं, तो PNG पूर्वावलोकन उपलब्ध रहता है और कोई कैनवास बटन विज्ञापित नहीं किया जाता।
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

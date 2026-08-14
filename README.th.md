@@ -152,7 +152,7 @@ DSH ให้บริการเฉพาะ `client.js` สำหรับป
 npm run sync:viewer-assets
 ```
 
-คำสั่ง sync ค่าเริ่มต้นคือ checkout `../openpencil` ที่อยู่ข้างเคียง ใช้ `OPENPENCIL_ROOT` หรือ `--openpencil-root` เพื่อแทนที่ ไลบรารีสินทรัพย์ที่ build ไว้ล่วงหน้าทั้งหมดสามารถเลือกได้ด้วย `DSH_OPENPENCIL_VIEWER_SOURCE` และการค้นหาตอนรันสามารถแทนที่ได้ด้วย `DSH_OPENPENCIL_VIEWER_ASSET_DIR`
+คำสั่ง sync จะเลือกใช้ checkout `../openpencil` ที่อยู่ข้างเคียง (การพัฒนาท้องถิ่น) เป็นอันดับแรก และใช้ submodule `vendor/openpencil` ที่ vendor ไว้เป็นตัวสำรอง (CI และการ clone ใหม่) ใช้ `OPENPENCIL_ROOT` หรือ `--openpencil-root` เพื่อแทนที่ ไลบรารีสินทรัพย์ที่ build ไว้ล่วงหน้าทั้งหมดสามารถเลือกได้ด้วย `DSH_OPENPENCIL_VIEWER_SOURCE` และการค้นหาตอนรันสามารถแทนที่ได้ด้วย `DSH_OPENPENCIL_VIEWER_ASSET_DIR`
 
 สินทรัพย์ viewer จะถูกโหลดแบบ lazy หลังจากผู้ใช้เปิดแคนวาสเท่านั้น หากสินทรัพย์ไม่มีหรือไม่ถูกต้อง พรีวิว PNG ยังคงใช้งานได้ และจะไม่มีการแสดงปุ่มแคนวาส
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

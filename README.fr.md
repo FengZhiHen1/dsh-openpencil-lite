@@ -152,7 +152,7 @@ DSH ne sert que `client.js` pour un plugin client ; le SDK ESM d'OpenPencil, son
 npm run sync:viewer-assets
 ```
 
-La commande de synchronisation cible par défaut un dépôt voisin `../openpencil`. Remplacez-le avec `OPENPENCIL_ROOT` ou `--openpencil-root`. Un répertoire de ressources précompilées complet peut être sélectionné avec `DSH_OPENPENCIL_VIEWER_SOURCE`. La recherche au runtime peut être remplacée avec `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
+La commande de synchronisation privilégie un dépôt voisin `../openpencil` (développement local), en recourant en dernier ressort au sous-module vendored `vendor/openpencil` (CI et nouveaux clones). Remplacez-la avec `OPENPENCIL_ROOT` ou `--openpencil-root`. Un répertoire de ressources précompilées complet peut être sélectionné avec `DSH_OPENPENCIL_VIEWER_SOURCE`. La recherche au runtime peut être remplacée avec `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
 
 Les ressources de la visionneuse sont chargées paresseusement uniquement après que l'utilisateur a ouvert le canevas. Si elles sont absentes ou invalides, l'aperçu PNG reste disponible et aucun bouton de canevas n'est proposé.
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

@@ -152,7 +152,7 @@ DSH はクライアントプラグインに `client.js` のみを配信するた
 npm run sync:viewer-assets
 ```
 
-同期コマンドはデフォルトで隣接する `../openpencil` チェックアウトを使用します。`OPENPENCIL_ROOT` または `--openpencil-root` で上書きできます。ビルド済みの完全なアセットディレクトリは `DSH_OPENPENCIL_VIEWER_SOURCE` で選択できます。ランタイムの参照先は `DSH_OPENPENCIL_VIEWER_ASSET_DIR` で上書きできます。
+同期コマンドは、隣接する `../openpencil` チェックアウト（ローカル開発）を優先し、ベンダリングされた `vendor/openpencil` サブモジュール（CI と新規クローン）にフォールバックします。`OPENPENCIL_ROOT` または `--openpencil-root` で上書きできます。ビルド済みの完全なアセットディレクトリは `DSH_OPENPENCIL_VIEWER_SOURCE` で選択できます。ランタイムの参照先は `DSH_OPENPENCIL_VIEWER_ASSET_DIR` で上書きできます。
 
 ビューアーアセットは、ユーザーがキャンバスを開いた後にのみ遅延ロードされます。それらが存在しないか無効な場合、PNG プレビューは引き続き利用可能で、キャンバスボタンは表示されません。
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

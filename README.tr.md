@@ -152,7 +152,7 @@ DSH bir istemci eklentisi için yalnızca `client.js` sunar; bu nedenle OpenPenc
 npm run sync:viewer-assets
 ```
 
-Senkronizasyon komutu varsayılan olarak kardeş bir `../openpencil` çalışma kopyasını kullanır. `OPENPENCIL_ROOT` veya `--openpencil-root` ile geçersiz kılabilirsiniz. Eksiksiz, önceden derlenmiş bir varlık dizini `DSH_OPENPENCIL_VIEWER_SOURCE` ile seçilebilir. Çalışma zamanı araması `DSH_OPENPENCIL_VIEWER_ASSET_DIR` ile geçersiz kılınabilir.
+Senkronizasyon komutu kardeş bir `../openpencil` çalışma kopyasını tercih eder (yerel geliştirme), gerekirse depoya gömülü `vendor/openpencil` alt modülüne geri döner (CI ve yeni klonlar). `OPENPENCIL_ROOT` veya `--openpencil-root` ile geçersiz kılabilirsiniz. Eksiksiz, önceden derlenmiş bir varlık dizini `DSH_OPENPENCIL_VIEWER_SOURCE` ile seçilebilir. Çalışma zamanı araması `DSH_OPENPENCIL_VIEWER_ASSET_DIR` ile geçersiz kılınabilir.
 
 Görüntüleyici varlıkları yalnızca kullanıcı tuvale açtıktan sonra tembel olarak yüklenir. Yoksa veya geçersizse PNG önizlemesi kullanılabilir kalır ve hiçbir tuval düğmesi tanıtılmaz.
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config

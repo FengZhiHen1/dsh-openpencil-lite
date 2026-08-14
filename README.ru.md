@@ -152,7 +152,7 @@ DSH обслуживает только `client.js` для клиентског�
 npm run sync:viewer-assets
 ```
 
-Команда синхронизации по умолчанию использует соседний чекаут `../openpencil`. Переопределите его с помощью `OPENPENCIL_ROOT` или `--openpencil-root`. Полный каталог предсобранных ассетов можно выбрать с помощью `DSH_OPENPENCIL_VIEWER_SOURCE`. Поиск во время выполнения можно переопределить с помощью `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
+Команда синхронизации предпочитает соседний чекаут `../openpencil` (локальная разработка) и переключается на вендорный субмодуль `vendor/openpencil` (CI и свежие клоны). Переопределите его с помощью `OPENPENCIL_ROOT` или `--openpencil-root`. Полный каталог предсобранных ассетов можно выбрать с помощью `DSH_OPENPENCIL_VIEWER_SOURCE`. Поиск во время выполнения можно переопределить с помощью `DSH_OPENPENCIL_VIEWER_ASSET_DIR`.
 
 Ассеты просмотрщика загружаются лениво только после того, как пользователь откроет холст. Если они отсутствуют или невалидны, превью PNG остаётся доступным, а кнопка холста не предлагается.
 
@@ -208,6 +208,7 @@ dsh-openpencil/
 ├── scripts/                   Build helpers — viewer asset sync, client build, host tests
 ├── tests/                     Node test suites (client, host API, MCP, viewer assets)
 ├── docs/images/               Documentation screenshots
+├── vendor/openpencil/         OpenPencil checkout (git submodule — viewer asset source)
 ├── cordis.patch.yml           DSH bundle patch that mounts the plugin
 ├── tsconfig.json              Host / Node TypeScript config
 └── tsconfig.client.json       Browser client TypeScript config
