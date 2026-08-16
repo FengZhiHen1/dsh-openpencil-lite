@@ -105,7 +105,20 @@ Kartu alat dan editor terkelola mengikuti lokale Tionghoa/Inggris serta tema ter
 
 ## Instalasi ke DSH
 
-Pasang plugin publik ke dalam DSH prerelease yang sudah diautentikasi tanpa memasang DSH secara global:
+DSH adalah paket terpisah. Pasang sekali jika belum ada:
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+Lalu tambahkan plugin ke sebuah profil dan jalankan aplikasi web:
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+Tidak ingin memasang DSH secara global? Jalankan dua langkah yang sama lewat `pnpm dlx`:
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest

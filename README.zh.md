@@ -105,7 +105,20 @@ DSH OpenPencil 将 [DeepSeek Harness](https://github.com/deepseek-ai/DSH) 与 [O
 
 ## 安装到 DSH
 
-将公共插件安装到已认证的 DSH 预发布版本中，而无需全局安装 DSH：
+DSH 是独立的包。若尚未安装，先装一次：
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+然后把插件装进某个 profile 并启动 Web 应用：
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+不想全局安装 DSH？用 `pnpm dlx` 跑同样的两步：
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest

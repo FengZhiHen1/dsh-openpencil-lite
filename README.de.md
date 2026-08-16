@@ -105,7 +105,20 @@ Die Tool-Karte und der verwaltete Editor übernehmen das Chinesisch-/Englisch-Lo
 
 ## Installation in DSH
 
-Installieren Sie das öffentliche Plugin in eine authentifizierte DSH-Prerelease, ohne DSH global zu installieren:
+DSH ist ein eigenes Paket. Installiere es einmalig, falls noch nicht vorhanden:
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+Füge dann das Plugin einem Profil hinzu und starte die Web-App:
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+Lieber ohne globale DSH-Installation? Führe dieselben zwei Schritte über `pnpm dlx` aus:
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest

@@ -105,7 +105,20 @@ The tool card and managed editor follow DSH's Chinese/English locale and light/d
 
 ## Install into DSH
 
-Install the public plugin into an authenticated DSH prerelease without installing DSH globally:
+DSH is a separate package. Install it once if you do not already have it:
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+Then add the plugin to a profile and start the web app:
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+Prefer not to install DSH globally? Run the same two steps through `pnpm dlx`:
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest

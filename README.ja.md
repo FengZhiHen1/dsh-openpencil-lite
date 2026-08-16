@@ -105,7 +105,20 @@ DSH OpenPencil は [DeepSeek Harness](https://github.com/deepseek-ai/DSH) と [O
 
 ## DSH へのインストール
 
-DSH をグローバルにインストールせずに、認証済みの DSH プレリリースへ公開プラグインをインストールします:
+DSH は別パッケージです。未導入なら一度インストールします:
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+次にプラグインをプロファイルへ追加し、Web アプリを起動します:
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+DSH をグローバルに入れたくない場合は、同じ 2 ステップを `pnpm dlx` で実行します:
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest

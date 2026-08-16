@@ -105,7 +105,20 @@ DSH OpenPencil เชื่อมต่อ [DeepSeek Harness](https://github.com
 
 ## ติดตั้งลงใน DSH
 
-ติดตั้งปลั๊กอินสาธารณะลงใน DSH prerelease ที่ล็อกอินแล้ว โดยไม่ต้องติดตั้ง DSH แบบ global:
+DSH เป็นแพ็กเกจแยกต่างหาก ถ้ายังไม่มีให้ติดตั้งหนึ่งครั้ง:
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+จากนั้นเพิ่มปลั๊กอินเข้าโปรไฟล์แล้วเริ่มเว็บแอป:
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+ไม่อยากติดตั้ง DSH แบบ global? รันสองขั้นตอนเดียวกันผ่าน `pnpm dlx`:
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest

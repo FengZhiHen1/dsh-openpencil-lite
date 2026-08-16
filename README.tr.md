@@ -105,7 +105,20 @@ Araç kartı ve yönetilen düzenleyici, düzenleme oturumunu yeniden yüklemede
 
 ## DSH'ye Kurulum
 
-Genel eklentiyi, DSH'yi genel olarak kurmadan kimliği doğrulanmış bir DSH ön sürümüne kurun:
+DSH ayrı bir pakettir. Henüz yoksa bir kez kurun:
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+Ardından eklentiyi bir profile ekleyin ve web uygulamasını başlatın:
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+DSH'yi global kurmak istemiyor musunuz? Aynı iki adımı `pnpm dlx` ile çalıştırın:
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest

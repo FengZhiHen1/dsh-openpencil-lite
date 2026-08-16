@@ -105,7 +105,20 @@ DSH OpenPencil связывает [DeepSeek Harness](https://github.com/deepseek
 
 ## Установка в DSH
 
-Установите публичный плагин в аутентифицированный пререлиз DSH без глобальной установки DSH:
+DSH — отдельный пакет. Установите его один раз, если его ещё нет:
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+Затем добавьте плагин в профиль и запустите веб-приложение:
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+Не хотите ставить DSH глобально? Выполните те же два шага через `pnpm dlx`:
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest

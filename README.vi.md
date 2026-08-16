@@ -105,7 +105,20 @@ Thẻ công cụ và trình biên tập quản lý tuân theo ngôn ngữ Trung/
 
 ## Cài đặt vào DSH
 
-Cài plugin công khai vào một bản prerelease đã xác thực của DSH mà không cần cài DSH toàn cục:
+DSH là một gói riêng. Cài một lần nếu bạn chưa có:
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+Sau đó thêm plugin vào một profile và khởi động ứng dụng web:
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+Không muốn cài DSH toàn cục? Chạy đúng hai bước đó qua `pnpm dlx`:
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest

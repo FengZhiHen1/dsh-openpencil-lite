@@ -105,7 +105,20 @@ DSH OpenPencil은 [DeepSeek Harness](https://github.com/deepseek-ai/DSH)와 [Ope
 
 ## DSH에 설치하기
 
-DSH를 전역으로 설치하지 않고 인증된 DSH 프리릴리스에 공개 플러그인을 설치합니다:
+DSH는 별도 패키지입니다. 아직 없다면 한 번 설치하세요:
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+그다음 플러그인을 프로필에 추가하고 웹 앱을 실행합니다:
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+DSH를 전역 설치하고 싶지 않다면 같은 두 단계를 `pnpm dlx`로 실행하세요:
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest

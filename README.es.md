@@ -105,7 +105,20 @@ La tarjeta de la herramienta y el editor administrado siguen la configuración r
 
 ## Instalación en DSH
 
-Instala el plugin público en una versión preliminar de DSH autenticada sin instalar DSH de forma global:
+DSH es un paquete aparte. Instálalo una vez si aún no lo tienes:
+
+```sh
+npm install -g @deepseek-ai/dsh@0.1.0-rc.6
+```
+
+Luego añade el plugin a un perfil e inicia la app web:
+
+```sh
+dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
+dsh web
+```
+
+¿Prefieres no instalar DSH globalmente? Ejecuta los mismos dos pasos con `pnpm dlx`:
 
 ```sh
 pnpm dlx --package=@deepseek-ai/dsh@0.1.0-rc.6 dsh plugin --profile web add @zseven-w/dsh-openpencil@latest
