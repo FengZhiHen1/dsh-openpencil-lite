@@ -1,7 +1,7 @@
 {
   "name": "@zseven-w/dsh-openpencil",
   "version": "0.1.0-rc.1",
-  "description": "OpenPencil plugin for DSH with exact multi-frame previews, an interactive canvas, and managed editor workbenches.",
+  "description": "Preview, inspect, and edit real .op OpenPencil design documents inside DSH conversations — headless rendering, a read-only canvas, and a managed editor.",
   "license": "MIT",
   "keywords": [
     "dsh",
