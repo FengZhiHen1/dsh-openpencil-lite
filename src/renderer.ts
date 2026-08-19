@@ -11,7 +11,7 @@
  *
  * Model-visible result values stay plain JSON; the browser-only envelope
  * rides `presentationMeta` (see `tool.ts`). Never return an ImageBlock.
- * @module dsh-openpencil/renderer
+ * @module dsh-openpencil-lite/renderer
  */
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
@@ -30,7 +30,7 @@ import type { EditorGrant } from './editor-host.js'
 import { OPENPENCIL_RENDER_TOOL_NAME } from './tool-names.js'
 
 /** HTTP prefix owned by the render capability route. */
-export const RENDER_ROUTE_PREFIX = '/_dsh/dsh-openpencil/render'
+export const RENDER_ROUTE_PREFIX = '/_dsh/dsh-openpencil-lite/render'
 
 /** Presentation metadata key reserved by the browser half of this package. */
 export const PRESENTATION_META_KEY = '$dshOpenPencil'

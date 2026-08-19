@@ -11,7 +11,7 @@
  * default staging directory is absent. A headless or source-only install can
  * therefore keep using the PNG presentation path. An explicitly configured
  * invalid directory is treated as a configuration error and throws.
- * @module dsh-openpencil/viewer-assets
+ * @module dsh-openpencil-lite/viewer-assets
  */
 
 import { createHash } from 'node:crypto'
@@ -24,7 +24,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** HTTP namespace owned by the read-only OpenPencil viewer assets. */
-export const VIEWER_ASSET_ROUTE_PREFIX = '/_dsh/dsh-openpencil/viewer-assets'
+export const VIEWER_ASSET_ROUTE_PREFIX = '/_dsh/dsh-openpencil-lite/viewer-assets'
 
 /** Environment override for an externally staged viewer-asset directory. */
 export const VIEWER_ASSET_DIR_ENV = 'DSH_OPENPENCIL_VIEWER_ASSET_DIR'

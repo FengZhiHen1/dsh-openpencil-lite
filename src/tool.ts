@@ -8,7 +8,7 @@
  * envelope with a signed preview URL rides `output.presentationMeta`
  * into `ToolCallBlock.meta`, where the keyed `tool.call.toolview`
  * component recognizes it and renders `<img>`.
- * @module dsh-openpencil/tool
+ * @module dsh-openpencil-lite/tool
  */
 
 import { defineTool, type JsonValue, type ToolRunContext } from '@deepseek-ai/dsh-tools'

@@ -106,9 +106,9 @@ async function createHarness({
     render,
     viewer: {
       viewerGrant: {
-        sdkUrl: '/_dsh/dsh-openpencil/viewer-assets/revision/sdk.js',
-        wasmUrl: '/_dsh/dsh-openpencil/viewer-assets/revision/op_web_sdk_bg.wasm',
-        canvasKitBaseUrl: '/_dsh/dsh-openpencil/viewer-assets/revision/canvaskit/',
+        sdkUrl: '/_dsh/dsh-openpencil-lite/viewer-assets/revision/sdk.js',
+        wasmUrl: '/_dsh/dsh-openpencil-lite/viewer-assets/revision/op_web_sdk_bg.wasm',
+        canvasKitBaseUrl: '/_dsh/dsh-openpencil-lite/viewer-assets/revision/canvaskit/',
       },
     },
     editor: {
@@ -116,8 +116,8 @@ async function createHarness({
         editorCalls.push({ sourcePath, sourceSha256 })
         return {
           enabled: true,
-          launchUrl: '/_dsh/dsh-openpencil/editor/live/launch',
-          refreshUrl: '/_dsh/dsh-openpencil/editor/live/refresh',
+          launchUrl: '/_dsh/dsh-openpencil-lite/editor/live/launch',
+          refreshUrl: '/_dsh/dsh-openpencil-lite/editor/live/refresh',
         }
       },
     },
@@ -219,8 +219,8 @@ test('live nested results hydrate only the presentation envelope and may restore
     assert.match(body.$dshOpenPencil.image.previewUrl, /^\/_dsh\/dsh-openpencil\/render\//)
     assert.equal(body.$dshOpenPencil.frames.length, 1)
     assert.equal(body.$dshOpenPencil.document.path, '/tmp/design.op')
-    assert.equal(body.$dshOpenPencil.viewer.sdkUrl, '/_dsh/dsh-openpencil/viewer-assets/revision/sdk.js')
-    assert.equal(body.$dshOpenPencil.editor.launchUrl, '/_dsh/dsh-openpencil/editor/live/launch')
+    assert.equal(body.$dshOpenPencil.viewer.sdkUrl, '/_dsh/dsh-openpencil-lite/viewer-assets/revision/sdk.js')
+    assert.equal(body.$dshOpenPencil.editor.launchUrl, '/_dsh/dsh-openpencil-lite/editor/live/launch')
     assert.deepEqual(harness.editorCalls, [{ sourcePath: '/tmp/design.op', sourceSha256: DOCUMENT_SHA }])
 
     observe(harness.hydration, 'session-remote', 'outer:code:2', harness.result)

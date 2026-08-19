@@ -29,7 +29,7 @@ import {
 } from './editor-recovery.js'
 import { OPENPENCIL_RENDER_TOOL_NAME } from './tool-names.js'
 
-export const EDITOR_ROUTE_PREFIX = '/_dsh/dsh-openpencil/editor'
+export const EDITOR_ROUTE_PREFIX = '/_dsh/dsh-openpencil-lite/editor'
 
 const CAPABILITY_TTL_MS = 2 * 60 * 60 * 1000
 const CAPABILITY_REFRESH_TTL_MS = 24 * 60 * 60 * 1000

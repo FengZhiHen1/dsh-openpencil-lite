@@ -652,7 +652,7 @@ test('idle pruning captures a dirty daemon before stopping it', async () => {
 
     const launchedAt = realDateNow()
     Date.now = () => launchedAt + 5 * 60 * 60 * 1000
-    const pruneProbe = await harness.request('/_dsh/dsh-openpencil/editor/not-found')
+    const pruneProbe = await harness.request('/_dsh/dsh-openpencil-lite/editor/not-found')
     assert.equal(pruneProbe.status, 404)
     Date.now = realDateNow
     await waitForExit(host.pid)

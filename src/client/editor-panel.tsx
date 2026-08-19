@@ -46,7 +46,7 @@ export interface LaunchResponse {
   renewed?: true
 }
 
-const DEFAULT_REFRESH_URL = '/_dsh/dsh-openpencil/editor/refresh'
+const DEFAULT_REFRESH_URL = '/_dsh/dsh-openpencil-lite/editor/refresh'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

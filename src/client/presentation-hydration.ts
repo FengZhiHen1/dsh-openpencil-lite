@@ -2,7 +2,7 @@
 
 import { OPENPENCIL_RENDER_TOOL_NAME } from '../tool-names.js'
 
-export const PRESENTATION_HYDRATION_ENDPOINT = '/_dsh/dsh-openpencil/presentation'
+export const PRESENTATION_HYDRATION_ENDPOINT = '/_dsh/dsh-openpencil-lite/presentation'
 export const PRESENTATION_HYDRATION_META_KEY = '$dshOpenPencil'
 const MAX_CANONICAL_RESULT_CHARS = 1024 * 1024
 const MAX_SESSION_ID_CHARS = 256

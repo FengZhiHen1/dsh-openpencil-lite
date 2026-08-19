@@ -10,7 +10,7 @@
  * an explicitly requested editor grant can be restored; replayed durable
  * events are preview-only.
  *
- * @module dsh-openpencil/presentation-hydration
+ * @module dsh-openpencil-lite/presentation-hydration
  */
 
 import { createHash } from 'node:crypto'
@@ -34,7 +34,7 @@ import { OPENPENCIL_RENDER_TOOL_NAME } from './tool-names.js'
 import type { ViewerAssetController } from './viewer-assets.js'
 
 /** Exact same-origin endpoint used by the client to recover nested metadata. */
-export const PRESENTATION_HYDRATION_ROUTE = '/_dsh/dsh-openpencil/presentation'
+export const PRESENTATION_HYDRATION_ROUTE = '/_dsh/dsh-openpencil-lite/presentation'
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/
 const RENDER_FILENAME_PATTERN = /^render-[A-Za-z0-9-]+\.png$/

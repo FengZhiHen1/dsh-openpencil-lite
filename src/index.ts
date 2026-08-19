@@ -1,5 +1,5 @@
 /**
- * @zseven-w/dsh-openpencil — preview `.op` design documents in DSH.
+ * dsh-openpencil-lite — preview and design `.op` documents in DSH.
  *
  * Plugin lifecycle: register the model-facing tool plus signed routes for
  * exact PNGs, immutable document snapshots, and the optional read-only Web
@@ -12,7 +12,7 @@
  * envelope rides `output.presentationMeta` into `ToolCallBlock.meta`, and
  * the keyed `tool.call.toolview` client component renders a PNG-first card
  * and lazily mounts the OpenPencil canvas on demand.
- * @module @zseven-w/dsh-openpencil
+ * @module dsh-openpencil-lite
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -67,7 +67,7 @@ export {
 } from './tool-names.js'
 
 /** Stable plugin name (the loader entry id in cordis.patch.yml). */
-export const name = '@zseven-w/dsh-openpencil'
+export const name = 'dsh-openpencil-lite'
 
 /** Services this plugin's root fiber requires. */
 export const inject = ['tools', 'sessions', 'fs', 'sandboxPolicy']
@@ -132,11 +132,11 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   // without the webserver still gets a plain-JSON result — no dangling URL.
   disposers.push(ctx.effect(
     () => hostCtx.tools.register(createDesignRenderTool(controller, viewerAssets, editorHost)),
-    `dsh-openpencil: ${OPENPENCIL_RENDER_TOOL_NAME} tool`,
+    `dsh-openpencil-lite: ${OPENPENCIL_RENDER_TOOL_NAME} tool`,
   ))
   disposers.push(ctx.effect(
     () => hostCtx.tools.register(createDesignSelectionTool(editorHost)),
-    `dsh-openpencil: ${OPENPENCIL_SELECTION_TOOL_NAME} tool`,
+    `dsh-openpencil-lite: ${OPENPENCIL_SELECTION_TOOL_NAME} tool`,
   ))
   disposers.push(ctx.effect(
     () => hostCtx.tools.register(createDesignNewTool(editorHost, {
@@ -144,23 +144,23 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       sandboxPolicy: hostCtx.sandboxPolicy,
       observe: (target, observation, exec) => eventCtx.emit('fs/observed', target, observation, exec),
     })),
-    `dsh-openpencil: ${OPENPENCIL_NEW_TOOL_NAME} tool`,
+    `dsh-openpencil-lite: ${OPENPENCIL_NEW_TOOL_NAME} tool`,
   ))
   disposers.push(ctx.effect(
     () => hostCtx.tools.register(createDesignCreateTool(editorHost)),
-    `dsh-openpencil: ${OPENPENCIL_CREATE_TOOL_NAME} tool`,
+    `dsh-openpencil-lite: ${OPENPENCIL_CREATE_TOOL_NAME} tool`,
   ))
   disposers.push(ctx.effect(
     () => hostCtx.tools.register(createDesignEditTool(editorHost)),
-    `dsh-openpencil: ${OPENPENCIL_EDIT_TOOL_NAME} tool`,
+    `dsh-openpencil-lite: ${OPENPENCIL_EDIT_TOOL_NAME} tool`,
   ))
   disposers.push(ctx.effect(
     () => eventCtx.on('tools/result', (exec, result) => presentationHydration.observeToolResult(exec, result)),
-    'dsh-openpencil: nested presentation result observer',
+    'dsh-openpencil-lite: nested presentation result observer',
   ))
   disposers.push(ctx.effect(
     () => eventCtx.on('session/disposed', session => presentationHydration.forgetSession(String(session.id))),
-    'dsh-openpencil: nested presentation session cleanup',
+    'dsh-openpencil-lite: nested presentation session cleanup',
   ))
 
   // Optional Web routes: only mounted when a webServer service exists
@@ -209,9 +209,9 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       detach()
       await disposeEditorHost()
     }
-  }, 'dsh-openpencil: render route'))
+  }, 'dsh-openpencil-lite: render route'))
 
-  ctx.logger.info(`dsh-openpencil mounted (${OPENPENCIL_TOOL_NAMES.join(' + ')}; viewer assets: ${viewerAssets.available ? 'ready' : 'unavailable'}; editor: ${editorHost.available ? 'ready' : 'unavailable'})`)
+  ctx.logger.info(`dsh-openpencil-lite mounted (${OPENPENCIL_TOOL_NAMES.join(' + ')}; viewer assets: ${viewerAssets.available ? 'ready' : 'unavailable'}; editor: ${editorHost.available ? 'ready' : 'unavailable'})`)
   return async () => {
     for (const dispose of disposers.reverse()) await dispose()
     await disposeEditorHost()

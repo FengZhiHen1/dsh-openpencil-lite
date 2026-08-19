@@ -95,10 +95,10 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
     assert.deepEqual(
       routeRegistrations.map(route => ({ kind: route.kind, path: route.path })),
       [
-        { kind: 'prefix', path: '/_dsh/dsh-openpencil/render' },
-        { kind: 'exact', path: '/_dsh/dsh-openpencil/presentation' },
-        { kind: 'prefix', path: '/_dsh/dsh-openpencil/viewer-assets' },
-        { kind: 'prefix', path: '/_dsh/dsh-openpencil/editor' },
+        { kind: 'prefix', path: '/_dsh/dsh-openpencil-lite/render' },
+        { kind: 'exact', path: '/_dsh/dsh-openpencil-lite/presentation' },
+        { kind: 'prefix', path: '/_dsh/dsh-openpencil-lite/viewer-assets' },
+        { kind: 'prefix', path: '/_dsh/dsh-openpencil-lite/editor' },
       ],
     )
     assert.equal(typeof disposeInjectedRoutes, 'function')

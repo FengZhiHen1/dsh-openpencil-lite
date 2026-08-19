@@ -51,7 +51,7 @@ function hydratedEnvelope() {
   return {
     $dshOpenPencil: {
       schemaVersion: 2,
-      document: { url: '/_dsh/dsh-openpencil/document/signed' },
+      document: { url: '/_dsh/dsh-openpencil-lite/document/signed' },
     },
   }
 }
@@ -209,7 +209,7 @@ test('hydrates a nested render grant with an exact same-origin fingerprint reque
   )
 
   assert.equal(calls.length, 1)
-  assert.equal(calls[0].input, '/_dsh/dsh-openpencil/presentation')
+  assert.equal(calls[0].input, '/_dsh/dsh-openpencil-lite/presentation')
   assert.equal(calls[0].init.method, 'POST')
   assert.equal(calls[0].init.credentials, 'same-origin')
   assert.equal(calls[0].init.headers['content-type'], 'application/json')
@@ -217,7 +217,7 @@ test('hydrates a nested render grant with an exact same-origin fingerprint reque
   assert.deepEqual(Object.keys(JSON.parse(calls[0].init.body)), [
     'sessionId', 'callId', 'documentSha256',
   ])
-  assert.equal(grant.document.url, '/_dsh/dsh-openpencil/document/signed')
+  assert.equal(grant.document.url, '/_dsh/dsh-openpencil-lite/document/signed')
 })
 
 test('presentation hydration fails closed on HTTP and malformed response data', async () => {
@@ -270,7 +270,7 @@ test('presentation hydration coalesces concurrent requests and isolates subscrib
 
   resolveResponse({ ok: true, json: async () => hydratedEnvelope() })
   const grant = await second
-  assert.equal(grant.document.url, '/_dsh/dsh-openpencil/document/signed')
+  assert.equal(grant.document.url, '/_dsh/dsh-openpencil-lite/document/signed')
 })
 
 test('an abandoned hydration does not poison an immediate remount retry', async () => {
@@ -301,7 +301,7 @@ test('an abandoned hydration does not poison an immediate remount retry', async 
   const grant = await retry
   assert.equal(calls.length, 2)
   assert.equal(calls[0].signal.aborted, true)
-  assert.equal(grant.document.url, '/_dsh/dsh-openpencil/document/signed')
+  assert.equal(grant.document.url, '/_dsh/dsh-openpencil-lite/document/signed')
 })
 
 test('pre-aborted hydration never starts network work', async () => {
@@ -1225,8 +1225,8 @@ test('selection polling cleanup aborts an in-flight request without scheduling a
 
 test('editor control capabilities remain on the DSH origin', () => {
   assert.equal(
-    client.editorControlUrl('/_dsh/dsh-openpencil/editor/launch'),
-    'http://127.0.0.1:3080/_dsh/dsh-openpencil/editor/launch',
+    client.editorControlUrl('/_dsh/dsh-openpencil-lite/editor/launch'),
+    'http://127.0.0.1:3080/_dsh/dsh-openpencil-lite/editor/launch',
   )
   assert.throws(
     () => client.editorControlUrl('https://example.com/save'),
@@ -1245,12 +1245,12 @@ test('editor recovery controls stay same-origin and restore only after an explic
   }
   const launch = {
     sessionId: 'managed-session',
-    recoveryUrl: '/_dsh/dsh-openpencil/editor/session/managed-session/recovery',
+    recoveryUrl: '/_dsh/dsh-openpencil-lite/editor/session/managed-session/recovery',
     recovery,
   }
   assert.equal(
     client.editorRecoveryItemUrl(launch, recovery.id),
-    `http://127.0.0.1:3080/_dsh/dsh-openpencil/editor/session/managed-session/recovery/${recovery.id}`,
+    `http://127.0.0.1:3080/_dsh/dsh-openpencil-lite/editor/session/managed-session/recovery/${recovery.id}`,
   )
   const calls = []
   const fetcher = async (url, init) => {
@@ -1282,35 +1282,35 @@ test('expired editor launch refreshes once and prefers current launch docJson', 
     calls.push({ url, init })
     if (calls.length === 1) return new Response(null, { status: 410 })
     if (calls.length === 2) {
-      return Response.json({ launchUrl: '/_dsh/dsh-openpencil/editor/fresh-cap' })
+      return Response.json({ launchUrl: '/_dsh/dsh-openpencil-lite/editor/fresh-cap' })
     }
     return Response.json({
       sessionId: 'editor-1',
       iframeUrl: 'http://127.0.0.1:49152/?embed=vscode',
       token: 'daemon-secret',
-      saveUrl: '/_dsh/dsh-openpencil/editor/save/editor-1',
-      closeUrl: '/_dsh/dsh-openpencil/editor/close/editor-1',
+      saveUrl: '/_dsh/dsh-openpencil-lite/editor/save/editor-1',
+      closeUrl: '/_dsh/dsh-openpencil-lite/editor/close/editor-1',
       docJson: '{"source":"current"}',
     })
   }
   const prepared = await client.prepareManagedEditor({
     enabled: true,
-    launchUrl: '/_dsh/dsh-openpencil/editor/old-cap',
+    launchUrl: '/_dsh/dsh-openpencil-lite/editor/old-cap',
   }, {
     path: '/workspace/design.op',
-    url: '/_dsh/dsh-openpencil/render/document-cap',
+    url: '/_dsh/dsh-openpencil-lite/render/document-cap',
   }, { fetcher })
 
   assert.equal(prepared.documentJson, '{"source":"current"}')
   assert.equal(calls.length, 3, 'launch docJson must avoid fetching the immutable historical snapshot')
-  assert.equal(calls[0].url, 'http://127.0.0.1:3080/_dsh/dsh-openpencil/editor/old-cap')
-  assert.equal(calls[1].url, 'http://127.0.0.1:3080/_dsh/dsh-openpencil/editor/refresh')
+  assert.equal(calls[0].url, 'http://127.0.0.1:3080/_dsh/dsh-openpencil-lite/editor/old-cap')
+  assert.equal(calls[1].url, 'http://127.0.0.1:3080/_dsh/dsh-openpencil-lite/editor/refresh')
   assert.deepEqual(JSON.parse(calls[1].init.body), {
-    launchUrl: '/_dsh/dsh-openpencil/editor/old-cap',
+    launchUrl: '/_dsh/dsh-openpencil-lite/editor/old-cap',
     sourcePath: '/workspace/design.op',
-    documentUrl: '/_dsh/dsh-openpencil/render/document-cap',
+    documentUrl: '/_dsh/dsh-openpencil-lite/render/document-cap',
   })
-  assert.equal(calls[2].url, 'http://127.0.0.1:3080/_dsh/dsh-openpencil/editor/fresh-cap')
+  assert.equal(calls[2].url, 'http://127.0.0.1:3080/_dsh/dsh-openpencil-lite/editor/fresh-cap')
 })
 
 test('old editor host falls back to the immutable document only when launch omits docJson', async () => {

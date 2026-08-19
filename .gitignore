@@ -11,8 +11,9 @@ node_modules
 *.pem
 *.key
 
-# Local build/test output.
-lib/
+# Local build/test output. `lib/` is deliberately NOT ignored: the fork
+# commits built artifacts so the web profile can consume it as a pinned
+# `github:` git dependency without a prepare hook.
 coverage/
 *.log
 *.tgz

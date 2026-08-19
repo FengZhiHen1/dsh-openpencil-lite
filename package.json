@@ -1,7 +1,7 @@
 {
-  "name": "@zseven-w/dsh-openpencil",
+  "name": "dsh-openpencil-lite",
   "version": "0.1.0-rc.1",
-  "description": "Preview, inspect, and edit real .op OpenPencil design documents inside DSH conversations — headless rendering, a read-only canvas, and a managed editor.",
+  "description": "OpenPencil lite plugin for DSH — headless design (new/apply), pure-JSON editing, exact multi-frame previews, a read-only canvas, and a better-sidebar preview tab. No managed editor workbench.",
   "license": "MIT",
   "keywords": [
     "dsh",
@@ -11,7 +11,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ZSeven-W/dsh-openpencil.git"
+    "url": "git+https://github.com/FengZhiHen1/dsh-openpencil-lite.git"
   },
   "type": "module",
   "publishConfig": {
