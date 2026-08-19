@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "revision": "b65fe4bbb11d2767358d",
+  "files": {
+    "sdk.js": {
+      "bytes": 129164,
+      "sha256": "1262ddf27d93ce4201b80ef40c361351edb9a5190291d42a62a689c652bd823b"
+    },
+    "op_web_sdk_bg.wasm": {
+      "bytes": 15890526,
+      "sha256": "04d47c298f72ae10bb28c045ec58d44edb30cc98bf07c9ebb5b23e8a9151c890"
+    },
+    "canvaskit/canvaskit.js": {
+      "bytes": 129433,
+      "sha256": "b2556106b80c5ff3041f3888d55e602636e1812c98cf77a72e7c328c8036c838"
+    },
+    "canvaskit/canvaskit.wasm": {
+      "bytes": 7094511,
+      "sha256": "2abfa191f92f0aee6e0c8e3ff9612294a7721a40761216867c1c059e7993c9d3"
+    }
+  }
+}
