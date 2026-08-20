@@ -16,8 +16,18 @@ export interface ActiveMcpCallOptions {
 }
 export interface CreateDocumentBatchOptions {
     operations: string;
+    pageId?: string;
     canvasWidth?: number;
     postProcess?: boolean;
+    /**
+     * Seed the transient daemon with an existing `.op` file instead of an empty
+     * document. The caller owns the temp file lifetime (it must copy the source
+     * to a private temp path first so the daemon can never overwrite the real
+     * target). Version semantics are per-daemon: a batch still bumps the MCP
+     * version from 0 to 1, so the post-batch increment guard below holds for
+     * both empty and existing-document starts.
+     */
+    startFromPath?: string;
     signal: AbortSignal;
 }
 export interface CreateDocumentBatchResult {
