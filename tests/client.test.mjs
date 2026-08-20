@@ -123,11 +123,14 @@ test('preview tab identity and copy are exposed', () => {
   assert.equal(client.designRenderCopy('en').previewTab, 'OpenPencil preview')
   assert.equal(client.designRenderCopy('zh').previewTabEmpty, '当前会话还没有渲染结果。')
   assert.equal(client.PRESENTATION_META_KEY, '$dshOpenPencil')
+  assert.equal('designRender' in client.designRenderCopy('en'), false, 'inline-card copy must be gone')
+  assert.equal('renderingDocument' in client.designRenderCopy('zh'), false, 'inline-card copy must be gone')
 })
 
-test('frame-gallery helpers and render view exports survive', () => {
-  assert.equal(typeof client.DesignRenderView, 'function')
+test('frame-gallery helpers and the silent render observer survive', () => {
+  assert.equal(typeof client.SilentRenderObserver, 'function')
   assert.equal(typeof client.OpenPencilPreviewTab, 'function')
+  assert.equal(typeof client.DesignRenderView, 'undefined', 'the inline card component must be gone')
   assert.equal(client.normalizeFrameIndex(9, 3), 2)
   assert.equal(client.frameLabel({ id: 'n1' }, 0), 'n1')
   assert.equal(client.frameLabel({ name: 'Home' }, 1), 'Home')

@@ -1,14 +1,13 @@
 /**
- * Browser presentation for `openpencil_render` and historical
+ * Browser-side presentation for `openpencil_render` and historical
  * `design_render` conversation cards.
  *
- * PNG remains the replay-safe default. When the host also grants access to
- * the source `.op`, the user can opt into one shared, read-only Web SDK
- * canvas. The SDK and document are fetched only after that explicit action.
- *
- * When `dsh-better-sidebar` is loaded, a single `openpencil:preview` sidebar
- * tab is registered and refreshed with the session's most recent render;
- * without it the plugin degrades to the inline card only.
+ * The inline conversation card is deliberately hidden: renders appear only in
+ * the `openpencil:preview` sidebar tab (registered against `dsh-better-sidebar`
+ * when present). A silent observer mounted on the tool-call slot recovers the
+ * browser-only grant envelope and feeds the per-session preview store; the
+ * tab then renders PNG frames and the optional read-only Web SDK canvas.
+ * Without `dsh-better-sidebar` the plugin renders no inline card at all.
  */
 
 import {
@@ -24,7 +23,6 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
-import type { CompatibleToolCallViewProps } from './details-compat.js'
 import { FrameGallery, normalizeFrameIndex as normalizedFrameIndex } from './frame-gallery.js'
 import type { GalleryFrame, GalleryLocale } from './frame-gallery.js'
 import {
@@ -90,21 +88,10 @@ export type PresentationLocale = GalleryLocale
 
 const DESIGN_RENDER_COPY = {
   en: {
-    designRender: 'OpenPencil render',
-    error: 'error',
-    rendering: 'rendering…',
-    done: 'done',
-    renderingDocument: 'Rendering the design document…',
-    renderFailed: 'The render failed.',
     frames: 'frames',
     openInteractiveCanvas: 'Open interactive canvas',
-    openRenderedPng: 'Open rendered PNG',
     downloadPng: 'Download PNG',
-    editSource: 'Open source .op',
     downloadSource: 'Download source .op',
-    inspectToolCall: 'Inspect tool call',
-    recoveringPreview: 'Recovering the OpenPencil preview…',
-    noPreview: 'No preview channel available in this host.',
     canvas: 'OpenPencil canvas',
     zoomOut: 'Zoom out',
     zoomIn: 'Zoom in',
@@ -123,21 +110,10 @@ const DESIGN_RENDER_COPY = {
     openSource: 'Open source .op',
   },
   zh: {
-    designRender: 'OpenPencil 渲染',
-    error: '错误',
-    rendering: '渲染中…',
-    done: '完成',
-    renderingDocument: '正在渲染设计文档…',
-    renderFailed: '渲染失败。',
     frames: '页',
     openInteractiveCanvas: '打开交互画布',
-    openRenderedPng: '打开渲染 PNG',
     downloadPng: '下载 PNG',
-    editSource: '打开源文件 .op',
     downloadSource: '下载源文件 .op',
-    inspectToolCall: '检查工具调用',
-    recoveringPreview: '正在恢复 OpenPencil 预览…',
-    noPreview: '当前宿主没有可用的预览通道。',
     canvas: 'OpenPencil 画布',
     zoomOut: '缩小',
     zoomIn: '放大',
@@ -298,19 +274,6 @@ export function grantOf(block: ToolCallViewProps['block']): PresentationGrant | 
   return presentationGrantOfMeta(block.meta)
 }
 
-/** Flatten the durable result text for the fallback disclosure. */
-function resultText(block: ToolCallViewProps['block']): string | null {
-  if (!('kind' in block)) return null
-  const parts: string[] = []
-  for (const item of block.content) {
-    parts.push(item.type === 'text' ? item.text : JSON.stringify(item, null, 2))
-  }
-  if (parts.length === 0 && block.error !== undefined) {
-    parts.push(`${block.error.name}: ${block.error.code}`)
-  }
-  return parts.join('\n') || null
-}
-
 interface Viewport {
   panX: number
   panY: number
@@ -372,35 +335,6 @@ export function claimCanvas(token: symbol, close: () => void): () => void {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  card: {
-    border: '1px solid var(--dsw-alias-border-l2)',
-    borderRadius: 8,
-    overflow: 'hidden',
-    background: 'var(--dsw-alias-bg-layer-1)',
-    fontFamily: 'inherit',
-  },
-  head: {
-    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-    fontSize: 13, fontWeight: 600,
-    borderBottom: '1px solid var(--dsw-alias-border-l1)',
-  },
-  badge: {
-    fontSize: 11, padding: '1px 8px', borderRadius: 99,
-    textTransform: 'uppercase', letterSpacing: 0.4,
-  },
-  badgeOk: {
-    background: 'color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent)',
-    color: 'var(--dsw-alias-state-success-primary)',
-  },
-  badgeError: {
-    background: 'color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent)',
-    color: 'var(--dsw-alias-state-error-primary)',
-  },
-  badgeRunning: {
-    background: 'color-mix(in srgb, var(--dsw-alias-border-l4) 15%, transparent)',
-    color: 'var(--dsw-alias-border-l4)',
-  },
-  body: { padding: 12 },
   imageViewport: {
     maxHeight: 560,
     overflow: 'auto',
@@ -426,14 +360,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--dsw-alias-state-business-primary)', background: 'transparent',
     padding: '4px 9px', cursor: 'pointer', font: 'inherit', fontSize: 12,
   },
-  pre: { whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 12, margin: 0, maxHeight: '24em', overflow: 'auto' },
   muted: { fontSize: 12, color: 'var(--ui-text-muted)' },
-  warning: {
-    margin: '10px 0 0', padding: '7px 9px', borderRadius: 6,
-    color: 'var(--dsw-alias-state-warn-label)',
-    background: 'color-mix(in srgb, var(--dsw-alias-state-warn-primary) 13%, transparent)',
-    fontSize: 12,
-  },
   backdrop: {
     position: 'fixed', inset: 0, zIndex: 2147483000,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -752,18 +679,21 @@ export function OpenPencilPreviewTab(props: SidebarPreviewTabProps): React.JSX.E
   )
 }
 
-/** Render one OpenPencil render tool call as a PNG-first card. */
-export function DesignRenderView({
+/**
+ * Silent observer mounted on `openpencil_render` / `design_render` tool calls.
+ *
+ * Renders NOTHING inline (the conversation card is hidden by design). It
+ * recovers the browser-only presentation grant (embedded or hydrated) and, on
+ * settle, feeds the session's preview store and focuses the sidebar tab.
+ */
+export function SilentRenderObserver({
   block,
   callId,
   toolName,
-  openFile,
-  inspect,
-  locale = 'en',
   sessionId,
-}: CompatibleToolCallViewProps & {
-  locale?: PresentationLocale
-}) {
+}: ToolCallViewProps & {
+  sessionId: unknown
+}): React.JSX.Element | null {
   const settled = 'kind' in block
   const error = settled && block.isError
   const running = !settled
@@ -781,18 +711,8 @@ export function DesignRenderView({
     ? undefined
     : `${hydrationRequest.sessionId}\n${hydrationRequest.callId}\n${hydrationRequest.documentSha256}`
   const [hydrated, setHydrated] = useState<{ key: string; grant: PresentationGrant }>()
-  const [hydrationFailedKey, setHydrationFailedKey] = useState<string>()
   const grant = embeddedGrant
     ?? (hydrated !== undefined && hydrated.key === hydrationKey ? hydrated.grant : undefined)
-  const hydrationPending = hydrationKey !== undefined && hydrationFailedKey !== hydrationKey
-  const copy = designRenderCopy(locale)
-  const text = resultText(block)
-  const frames = grant?.frames ?? []
-  const [selectedFrameIndex, setSelectedFrameIndex] = useState(0)
-  const currentFrameIndex = normalizedFrameIndex(selectedFrameIndex, frames.length)
-  const selectedFrame = frames[currentFrameIndex] ?? grant?.image
-  const [modalToken, setModalToken] = useState<symbol>()
-  const releaseRef = useRef<() => void>()
 
   useEffect(() => {
     if (hydrationKey === undefined || hydrationRequest === undefined) return
@@ -800,8 +720,6 @@ export function DesignRenderView({
     void requestPresentationGrant(hydrationRequest, presentationGrantOfMeta, { signal: controller.signal }).then(nextGrant => {
       if (nextGrant !== undefined && !controller.signal.aborted) {
         setHydrated({ key: hydrationKey, grant: nextGrant })
-      } else if (!controller.signal.aborted) {
-        setHydrationFailedKey(hydrationKey)
       }
     })
     return () => { controller.abort() }
@@ -820,83 +738,23 @@ export function DesignRenderView({
     previewOpenTab?.({ type: OPENPENCIL_PREVIEW_TAB_TYPE, path: sourcePath, sessionId: sid })
   }, [settleGrant])
 
-  useEffect(() => () => { releaseRef.current?.() }, [])
-  useEffect(() => { setSelectedFrameIndex(0) }, [frames.map(frame => frame.previewUrl).join('\n')])
-
-  const badge = error
-    ? <span style={{ ...styles.badge, ...styles.badgeError }}>{copy.error}</span>
-    : running
-      ? <span style={{ ...styles.badge, ...styles.badgeRunning }}>{copy.rendering}</span>
-      : <span style={{ ...styles.badge, ...styles.badgeOk }}>{copy.done}</span>
-
-  const openCanvas = useCallback(() => {
-    const token = Symbol('openpencil-canvas')
-    releaseRef.current?.()
-    releaseRef.current = claimCanvas(token, () => {
-      setModalToken((current) => current === token ? undefined : current)
-    })
-    setModalToken(token)
-  }, [])
-
-  return (
-    <section style={styles.card} data-tool={OPENPENCIL_RENDER_TOOL_NAME} data-state={error ? 'error' : running ? 'running' : 'success'}>
-      <div style={styles.head}><span>{copy.designRender}</span>{badge}</div>
-      <div style={styles.body}>
-        {running ? <p style={styles.muted}>{copy.renderingDocument}</p> : null}
-        {error ? <p style={styles.muted}>{text ?? copy.renderFailed}</p> : null}
-        {!running && !error && frames.length > 0 ? (
-          <FrameGallery frames={frames} selectedIndex={currentFrameIndex} onSelect={setSelectedFrameIndex} locale={locale} />
-        ) : null}
-        {!running && !error && grant?.warnings !== undefined ? (
-          <div style={styles.warning} role="status">{grant.warnings.join(' ')}</div>
-        ) : null}
-        {!running && !error && grant !== undefined ? (
-          <div style={styles.meta}>
-            {selectedFrame !== undefined ? <span>{selectedFrame.name ?? baseName(selectedFrame.path)}</span> : null}
-            {frames.length > 1 ? <span>{frames.length} {copy.frames}</span> : null}
-            {grant.renderer !== undefined ? (
-              <span title={grant.rendererBinary}>{grant.renderer}{grant.fidelity === undefined ? '' : ` · ${grant.fidelity}`}</span>
-            ) : null}
-            {grant.document !== undefined && grant.viewer !== undefined ? <button type="button" style={styles.primaryButton} onClick={openCanvas}>{copy.openInteractiveCanvas}</button> : null}
-            {selectedFrame !== undefined && openFile !== undefined ? (
-              <button type="button" style={styles.button} onClick={() => { openFile(selectedFrame.path) }}>{copy.openRenderedPng}</button>
-            ) : null}
-            {selectedFrame !== undefined ? <a style={styles.link} href={selectedFrame.downloadUrl} download>{copy.downloadPng}</a> : null}
-            {grant.document?.path !== undefined && openFile !== undefined ? (
-              <button type="button" style={styles.button} onClick={() => { openFile(grant.document?.path ?? '') }}>{copy.editSource}</button>
-            ) : null}
-            {grant.document?.downloadUrl !== undefined ? <a style={styles.link} href={grant.document.downloadUrl} download>{copy.downloadSource}</a> : null}
-            {inspect !== undefined ? <button type="button" style={styles.button} onClick={inspect}>{copy.inspectToolCall}</button> : null}
-          </div>
-        ) : null}
-        {!running && !error && grant === undefined && hydrationPending ? (
-          <p style={styles.muted} role="status">{copy.recoveringPreview}</p>
-        ) : null}
-        {!running && !error && grant === undefined && !hydrationPending ? (
-          <><p style={styles.muted}>{copy.noPreview}</p>{text !== null ? <pre style={{ ...styles.pre, marginTop: 8 }}>{text}</pre> : null}</>
-        ) : null}
-      </div>
-      {modalToken !== undefined && grant?.document !== undefined && grant.viewer !== undefined ? <CanvasModal grant={grant} onClose={() => { closeModalCanvas(setModalToken, releaseRef) }} locale={locale} /> : null}
-    </section>
-  )
+  return null
 }
 
 /** Required client services. */
 export const inject = ['slots', 'locale']
 
-/** Register the canonical render view plus the optional sidebar preview tab. */
+/** Register the silent render observer plus the optional sidebar preview tab. */
 export function apply(ctx: ClientContext): void {
   const subscribeLocale = (notify: () => void): (() => boolean) => ctx.on('locale/change', notify)
   const getLocale = (): PresentationLocale => ctx.locale.getLocale().active
 
-  const HostSyncedDesignRenderView = (props: ToolCallViewProps): React.JSX.Element => {
-    const locale = useSyncExternalStore(subscribeLocale, getLocale, getLocale)
-    return <DesignRenderView {...props} locale={locale} />
-  }
+  // The inline card is hidden: the observer renders nothing and only feeds the
+  // preview store + opens the sidebar tab.
   for (const toolName of [OPENPENCIL_RENDER_TOOL_NAME, LEGACY_DESIGN_RENDER_TOOL_NAME]) {
     ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
       { name: 'tool.call.toolview', key: toolName },
-      HostSyncedDesignRenderView,
+      SilentRenderObserver,
     ))
   }
 
@@ -922,9 +780,11 @@ export function apply(ctx: ClientContext): void {
       id: OPENPENCIL_PREVIEW_TAB_TYPE,
       title: () => designRenderCopy(getLocale()).previewTab,
       single: true,
-      component: (props: SidebarPreviewTabProps) => (
-        <OpenPencilPreviewTab {...props} locale={getLocale()} />
-      ),
+      component: (props: SidebarPreviewTabProps) => {
+        // Component-level locale subscription so tab copy follows DSH locale.
+        const locale = useSyncExternalStore(subscribeLocale, getLocale, getLocale)
+        return <OpenPencilPreviewTab {...props} locale={locale} />
+      },
     })
     return () => {
       dispose()
