@@ -1,7 +1,7 @@
 /**
  * dsh-openpencil-lite — preview and design `.op` documents in DSH.
  *
- * Plugin lifecycle: register the model-facing tool plus signed routes for
+ * Plugin lifecycle: register the model-facing tools plus signed routes for
  * exact PNGs, immutable document snapshots, and the optional read-only Web
  * SDK canvas. Everything is
  * registered through `ctx.effect` (or a returned disposer) so unloading the
@@ -15,7 +15,7 @@
  * @module dsh-openpencil-lite
  */
 import type { Context } from '@deepseek-ai/cordis';
-export { LEGACY_DESIGN_RENDER_TOOL_NAME, OPENPENCIL_APPLY_TOOL_NAME, OPENPENCIL_CREATE_TOOL_NAME, OPENPENCIL_EDIT_TOOL_NAME, OPENPENCIL_NEW_TOOL_NAME, OPENPENCIL_RENDER_TOOL_NAME, OPENPENCIL_SELECTION_TOOL_NAME, OPENPENCIL_TOOL_NAMES, } from './tool-names.js';
+export { LEGACY_DESIGN_RENDER_TOOL_NAME, OPENPENCIL_APPLY_TOOL_NAME, OPENPENCIL_NEW_TOOL_NAME, OPENPENCIL_RENDER_TOOL_NAME, OPENPENCIL_TOOL_NAMES, } from './tool-names.js';
 /** Stable plugin name (the loader entry id in cordis.patch.yml). */
 export declare const name = "dsh-openpencil-lite";
 /** Services this plugin's root fiber requires. */

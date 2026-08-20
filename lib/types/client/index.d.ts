@@ -5,29 +5,23 @@
  * PNG remains the replay-safe default. When the host also grants access to
  * the source `.op`, the user can opt into one shared, read-only Web SDK
  * canvas. The SDK and document are fetched only after that explicit action.
+ *
+ * When `dsh-better-sidebar` is loaded, a single `openpencil:preview` sidebar
+ * tab is registered and refreshed with the session's most recent render;
+ * without it the plugin degrades to the inline card only.
  */
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client';
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
-import { type EditorColorScheme, type EditorLocale } from './editor-bridge.js';
-import { type CompatibleToolCallViewProps, type CompatibleToolDetailsViewProps } from './details-compat.js';
-import type { EditorWorkbenchRequest } from './editor-workbench-host.js';
+import type { CompatibleToolCallViewProps } from './details-compat.js';
 import type { GalleryFrame, GalleryLocale } from './frame-gallery.js';
 export { LEGACY_DESIGN_RENDER_TOOL_NAME, OPENPENCIL_RENDER_TOOL_NAME, } from '../tool-names.js';
 export { calculateGalleryFitViewZoom, clampGalleryZoom, frameLabel, frameGalleryCopy, galleryZoomCommandTarget, galleryViewportMaxHeight, galleryZoomPercent, galleryZoomShortcut, GALLERY_COMPACT_MAX_HEIGHT, GALLERY_TOOLBAR_CONTROL_CONTENT_LAYOUT, GALLERY_TOOLBAR_CONTROL_HEIGHT, GALLERY_TOOLBAR_CONTROL_LAYOUT, GALLERY_ZOOM_MAX, GALLERY_ZOOM_MIN, GALLERY_ZOOM_STEP, nextGalleryZoom, normalizeFrameIndex, } from './frame-gallery.js';
-export { applyManagedEditorUnmountPolicy, beginEditorInitRetry, closeManagedEditorLaunch, editorPanelCopy, launchManagedEditor, prepareManagedEditor, prepareManagedEditorForMount, } from './editor-panel.js';
-export { requestOpenPencilEditor, } from './details-compat.js';
-export { clampEditorWorkbenchWidth, confirmEditorModalClose, editorModalCopy, editorWorkbenchEditorKey, editorWorkbenchFocusTargetIndex, editorWorkbenchShouldHandleEscape, editorWorkbenchUsesFullscreen, editorWorkbenchWidthBounds, EDITOR_WORKBENCH_FULLSCREEN_BREAKPOINT, EDITOR_WORKBENCH_LEFT_CLEARANCE, EDITOR_WORKBENCH_MAX_WIDTH, EDITOR_WORKBENCH_MIN_WIDTH, EDITOR_WORKBENCH_RESIZE_STEP, resizedEditorWorkbenchWidth, } from './editor-modal.js';
-export { claimEditorWorkbenchDock, OPENPENCIL_WORKBENCH_DOCK_ATTRIBUTE, } from './editor-dock-layout.js';
-export { createEditorWorkbenchStore, mountEditorWorkbenchHost, preserveEditorBeforeWorkbenchDispose, } from './editor-workbench-host.js';
-export { editorGrantForBoot, editorSuccessorFromSave, editorSuccessorStorageKey, rememberEditorSuccessor, } from './editor-successor.js';
-export { captureManagedEditorRecovery, discardManagedEditorRecovery, editorRecoveryCopy, editorRecoveryItemUrl, editorRecoverySummaryOf, restoreManagedEditorRecovery, } from './editor-recovery.js';
-export { claimEditor, confirmEditorClose, editorControlUrl, editorIframeUrlWithLocale, editorIframeUrlWithTheme, editorLocaleFromDsh, editorMessageFrom, editorOrigin, encodeEditorOutbound, parseEditorInbound, } from './editor-bridge.js';
-export { clearOpenPencilSelection, getOpenPencilSelectionSnapshot, liveSelectionOf, publishOpenPencilSelection, subscribeOpenPencilSelection, } from './selection-store.js';
-export { isTerminalEditorSelectionStatus, startEditorSelectionPolling, } from './selection-polling.js';
-export { hasOpenPencilSelection, OPENPENCIL_SELECTION_DOCK_LAYOUT, selectionNodeDetail, selectionNodeLabel, } from './selection-dock.js';
-export { documentSha256FromCanonicalResult, PRESENTATION_HYDRATION_ENDPOINT, presentationHydrationRequestOf, requestPresentationGrant, } from './presentation-hydration.js';
+export { requestPresentationGrant, PRESENTATION_HYDRATION_ENDPOINT, presentationHydrationRequestOf, documentSha256FromCanonicalResult, } from './presentation-hydration.js';
+export { forgetSessionRenders, getRecentRender, publishRecentRender, subscribeRecentRender, type RecentRender, } from './preview-store.js';
 /** Presentation metadata key the host half projects into `block.meta`. */
 export declare const PRESENTATION_META_KEY = "$dshOpenPencil";
+/** Sidebar tab type owned by this plugin (registered when better-sidebar is present). */
+export declare const OPENPENCIL_PREVIEW_TAB_TYPE: "openpencil:preview";
 export type PresentationLocale = GalleryLocale;
 export declare function designRenderCopy(locale: PresentationLocale): {
     readonly designRender: "OpenPencil render";
@@ -38,11 +32,9 @@ export declare function designRenderCopy(locale: PresentationLocale): {
     readonly renderFailed: "The render failed.";
     readonly frames: "frames";
     readonly openInteractiveCanvas: "Open interactive canvas";
-    readonly editCanvas: "Edit canvas";
-    readonly editInSidebar: "Edit in sidebar";
     readonly openRenderedPng: "Open rendered PNG";
     readonly downloadPng: "Download PNG";
-    readonly editSource: "Edit source .op";
+    readonly editSource: "Open source .op";
     readonly downloadSource: "Download source .op";
     readonly inspectToolCall: "Inspect tool call";
     readonly recoveringPreview: "Recovering the OpenPencil preview…";
@@ -59,7 +51,10 @@ export declare function designRenderCopy(locale: PresentationLocale): {
     readonly openPngFallback: "Open PNG fallback";
     readonly panHint: "Drag to pan · scroll to pan · Ctrl/⌘ + scroll to zoom";
     readonly snapshot: "snapshot";
-    readonly editorUnavailable: "Editable OpenPencil canvas is not available for this result.";
+    readonly previewTab: "OpenPencil preview";
+    readonly previewTabEmpty: "No render yet for this session.";
+    readonly previewTabEmptyHint: "Ask the agent to run openpencil_render to see the design preview here.";
+    readonly openSource: "Open source .op";
 } | {
     readonly designRender: "OpenPencil 渲染";
     readonly error: "错误";
@@ -69,11 +64,9 @@ export declare function designRenderCopy(locale: PresentationLocale): {
     readonly renderFailed: "渲染失败。";
     readonly frames: "页";
     readonly openInteractiveCanvas: "打开交互画布";
-    readonly editCanvas: "编辑画布";
-    readonly editInSidebar: "在侧边栏编辑";
     readonly openRenderedPng: "打开渲染 PNG";
     readonly downloadPng: "下载 PNG";
-    readonly editSource: "编辑源文件 .op";
+    readonly editSource: "打开源文件 .op";
     readonly downloadSource: "下载源文件 .op";
     readonly inspectToolCall: "检查工具调用";
     readonly recoveringPreview: "正在恢复 OpenPencil 预览…";
@@ -90,7 +83,10 @@ export declare function designRenderCopy(locale: PresentationLocale): {
     readonly openPngFallback: "打开 PNG 预览";
     readonly panHint: "拖动平移 · 滚动平移 · Ctrl/⌘ + 滚动缩放";
     readonly snapshot: "快照";
-    readonly editorUnavailable: "此渲染结果没有可用的 OpenPencil 编辑画布。";
+    readonly previewTab: "OpenPencil 预览";
+    readonly previewTabEmpty: "当前会话还没有渲染结果。";
+    readonly previewTabEmptyHint: "请让 Agent 执行 openpencil_render，设计预览会显示在这里。";
+    readonly openSource: "打开源文件 .op";
 };
 export interface ImageGrant extends GalleryFrame {
 }
@@ -107,23 +103,16 @@ export interface ViewerGrant {
     wasmUrl: string;
     canvasKitBaseUrl: string;
 }
-export interface EditorGrant {
-    enabled: true;
-    launchUrl: string;
-    refreshUrl?: string;
-}
 export interface PresentationGrant {
     schemaVersion: 1 | 2;
     image?: ImageGrant;
     frames?: ImageGrant[];
     document?: DocumentGrant;
     viewer?: ViewerGrant;
-    editor?: EditorGrant;
     renderer?: string;
     rendererBinary?: string;
     fidelity?: string;
     warnings?: string[];
-    autoOpenEditor?: boolean;
 }
 /** Parse both the established v1 envelope and the additive v2 shape. */
 export declare function presentationGrantOfMeta(metaValue: unknown): PresentationGrant | undefined;
@@ -159,18 +148,29 @@ export declare function sizeCanvasForDisplay(canvas: Pick<HTMLCanvasElement, 'cl
     cssHeight: number;
     dpr: number;
 };
-/** Render one OpenPencil render tool call as a PNG-first card. */
-export declare function DesignRenderView({ block, callId, toolName, openDetails, openFile, inspect, locale, sessionId, openEditorWorkbench, autoOpenEditorWorkbench, }: CompatibleToolCallViewProps & {
+/** Structural subset of dsh-better-sidebar's TabComponentProps. */
+interface SidebarPreviewTabProps {
+    ctx: unknown;
+    scope: {
+        sessionId?: string;
+    };
+    tab: unknown;
+    visible: boolean;
+    expanded?: string[];
+    onToggleDir?: (path: string) => void;
+    onReferenceFile?: (path: string) => void;
+    onOpenFile?: (path: string) => void;
+    onOpenDiff?: (tab: unknown) => void;
+    onSubagentJump?: (childSessionId: string) => void;
     locale?: PresentationLocale;
-    openEditorWorkbench?: (request: EditorWorkbenchRequest) => boolean | Promise<boolean>;
-    autoOpenEditorWorkbench?: (request: EditorWorkbenchRequest) => boolean | Promise<boolean>;
-}): import("react").JSX.Element;
-/** Render the selected editable design inside DSH's resident details column. */
-export declare function OpenPencilEditorPanel({ block, colorScheme, locale, sessionId }: CompatibleToolDetailsViewProps & {
-    colorScheme: EditorColorScheme;
-    locale: EditorLocale;
+}
+/** The `openpencil:preview` sidebar tab: latest render of the session. */
+export declare function OpenPencilPreviewTab(props: SidebarPreviewTabProps): React.JSX.Element;
+/** Render one OpenPencil render tool call as a PNG-first card. */
+export declare function DesignRenderView({ block, callId, toolName, openFile, inspect, locale, sessionId, }: CompatibleToolCallViewProps & {
+    locale?: PresentationLocale;
 }): import("react").JSX.Element;
 /** Required client services. */
 export declare const inject: string[];
-/** Register canonical views plus a presentation-only alias for replaying historical cards. */
+/** Register the canonical render view plus the optional sidebar preview tab. */
 export declare function apply(ctx: ClientContext): void;

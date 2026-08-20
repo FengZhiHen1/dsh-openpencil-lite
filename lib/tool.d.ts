@@ -12,16 +12,11 @@
  */
 import { RenderAccessController } from './renderer.js';
 import type { ViewerAssetController } from './viewer-assets.js';
-import type { EditorHostController } from './editor-host.js';
 export interface DesignRenderArgs {
     path: string;
     width?: number;
     height?: number;
     scale?: number;
-    /** Explicitly expose the original source to the managed sidebar editor. */
-    editable?: boolean;
-    /** Expand the editor once on the live result card; intended for openpencil_new follow-ups. */
-    autoOpen?: boolean;
 }
 /** Create the `openpencil_render` tool definition bound to one controller. */
-export declare function createDesignRenderTool(controller: RenderAccessController, viewerAssets?: ViewerAssetController, editorHost?: EditorHostController): import("@deepseek-ai/dsh-tools").ToolDefinition;
+export declare function createDesignRenderTool(controller: RenderAccessController, viewerAssets?: ViewerAssetController): import("@deepseek-ai/dsh-tools").ToolDefinition;

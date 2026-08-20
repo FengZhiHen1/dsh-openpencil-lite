@@ -7,15 +7,14 @@
  * `tool/result` presentation metadata from that event. The browser can ask
  * this same-origin endpoint to re-project that metadata without submitting
  * any path or tool result of its own. Live results are remembered briefly so
- * an explicitly requested editor grant can be restored; replayed durable
- * events are preview-only.
+ * the preview envelope can be restored; replayed durable events are
+ * preview-only.
  *
  * @module dsh-openpencil-lite/presentation-hydration
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { type SessionStore } from '@deepseek-ai/dsh-session';
 import type { ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools';
-import { type EditorHostController } from './editor-host.js';
 import { RenderAccessController, type RenderResult } from './renderer.js';
 import type { ViewerAssetController } from './viewer-assets.js';
 /** Exact same-origin endpoint used by the client to recover nested metadata. */
@@ -31,7 +30,6 @@ interface PresentationHydrationDependencies {
     sessions: Pick<SessionStore, 'get'>;
     render: RenderAccessController;
     viewer?: Pick<ViewerAssetController, 'viewerGrant'>;
-    editor?: Pick<EditorHostController, 'grantFor'>;
     /** DSH Web authorities derived from `webRuntime.trustedHosts`. */
     trustedHosts?: readonly string[] | (() => readonly string[]);
 }

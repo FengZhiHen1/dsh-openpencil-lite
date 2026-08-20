@@ -16,7 +16,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { JsonValue } from '@deepseek-ai/dsh-tools';
 import type { ViewerGrant } from './viewer-assets.js';
-import type { EditorGrant } from './editor-host.js';
 import { OPENPENCIL_RENDER_TOOL_NAME } from './tool-names.js';
 /** HTTP prefix owned by the render capability route. */
 export declare const RENDER_ROUTE_PREFIX = "/_dsh/dsh-openpencil-lite/render";
@@ -99,9 +98,6 @@ export interface RenderResult {
     /** Ordered top-level frames. The first entry is also exposed by legacy image fields. */
     frames?: RenderFrame[];
     frameCount?: number;
-    editable?: boolean;
-    /** Live-card intent: expand the editor once after a newly-created design renders. */
-    autoOpenEditor?: boolean;
     document?: DocumentSnapshot;
     note?: string;
 }
@@ -190,7 +186,7 @@ export declare function runOpenPencilRender(options: {
  * Purely enrich a canonical tool-result value with a browser render grant.
  * Returns the value unchanged when no route/artifact exists.
  */
-export declare function projectRenderGrant(value: JsonValue, controller: RenderAccessController, viewer?: ViewerGrant, editor?: EditorGrant): JsonValue;
+export declare function projectRenderGrant(value: JsonValue, controller: RenderAccessController, viewer?: ViewerGrant): JsonValue;
 /** Reserve a fresh output path inside the managed render directory. */
 export declare function createRenderOutput(): Promise<string>;
 /** Stat + cap-check a freshly rendered PNG. */
