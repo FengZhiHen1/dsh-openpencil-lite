@@ -136,7 +136,7 @@ test('openpencil_new publishes one completed batch through guarded DSH filesyste
     applied: true,
     saved: true,
     result: { applied: true, inserted: 1 },
-    note: `Created and saved ${harness.processPath}. Call openpencil_render with this path, editable=true, and autoOpen=true now.`,
+    note: `Created and saved ${harness.processPath}. Call openpencil_render with this path now to show the design and verify it.`,
   })
 })
 
@@ -297,12 +297,13 @@ test('openpencil_new exposes a strict creation schema and output contract', () =
 
   const decisionContract = `${harness.tool.description}\n${harness.tool.parameters.properties.operations.description}`
   assert.doesNotMatch(decisionContract, /\{\.\.\.\}/, 'model-facing examples must be executable rather than schematic')
-  assert.match(decisionContract, /no \.op file or live editor/i)
+  assert.match(decisionContract, /no \.op file exists/i)
   assert.match(decisionContract, /do not ask the user to open a sidebar/i)
   assert.match(decisionContract, /prefer(?:ably)? at most 25 top-level operations/i)
   assert.match(decisionContract, /root=I\(null,/)
   assert.match(decisionContract, /photo=G\(slot,"search","seasonal food photography"\)/)
   assert.match(decisionContract, /do not ask image-provider questions/i)
-  assert.match(decisionContract, /openpencil_render.*editable=true/i)
-  assert.match(decisionContract, /autoOpen=true/i)
+  assert.match(decisionContract, /openpencil_render with the returned path/i)
+  assert.doesNotMatch(decisionContract, /editable=true/i, 'no editor guidance must remain in the new-tool contract')
+  assert.doesNotMatch(decisionContract, /autoOpen/i, 'no editor auto-open guidance must remain')
 })

@@ -27,14 +27,9 @@ const {
   VIEWER_ASSET_ROUTE_PREFIX,
   prepareViewerAssets,
 } = await import('../lib/viewer-assets.js')
-const {
-  EDITOR_ROUTE_PREFIX,
-  EditorHostController,
-} = await import('../lib/editor-host.js')
 const { OPENPENCIL_RENDER_TOOL_NAME } = await import('../lib/tool-names.js')
 
 let server
-let editorHost
 try {
   const mutableSource = join(root, basename(fixture))
   await copyFile(fixture, mutableSource)
@@ -83,12 +78,6 @@ try {
   assert.equal(viewerAssets.available, true)
   const detachRender = access.attachRoute()
   const detachViewer = viewerAssets.attachRoute()
-  const editorMasterKey = Buffer.alloc(32, 11)
-  editorHost = new EditorHostController(editorMasterKey)
-  assert.equal(editorHost.available, true)
-  const detachEditor = editorHost.attachRoute()
-  const editorGrant = editorHost.grantFor(mutableSource, sourceHash)
-  assert.ok(editorGrant)
 
   const value = {
     path: exact.png,
@@ -111,7 +100,7 @@ try {
     frameCount: verifiedFrames.length,
     document: snapshot,
   }
-  const projected = projectRenderGrant(value, access, viewerAssets.viewerGrant, editorGrant)
+  const projected = projectRenderGrant(value, access, viewerAssets.viewerGrant)
   const envelope = projected.$dshOpenPencil
   assert.equal(envelope.schemaVersion, 2)
   assert.equal(envelope.image.width, image.width)
@@ -123,9 +112,7 @@ try {
   assert.equal(envelope.document.sha256, sourceHash)
   assert.equal(envelope.rendererBinary, binary)
   assert.ok(envelope.viewer.sdkUrl.includes('/viewer-assets/'))
-  assert.equal(envelope.editor.enabled, true)
-  assert.match(envelope.editor.refreshUrl, /\/refresh$/)
-  assert.equal(envelope.editor.launchUrl.includes(mutableSource), false)
+  assert.equal('editor' in envelope, false, 'no editor grant may be projected (AC-09)')
 
   const decodedToken = JSON.parse(Buffer.from(envelope.image.previewUrl.split('/').at(-1).split('.')[0], 'base64url').toString())
   assert.equal(decodedToken.v, 2)
@@ -133,7 +120,6 @@ try {
 
   server = createServer((req, res) => {
     if ((req.url ?? '').startsWith(VIEWER_ASSET_ROUTE_PREFIX)) void viewerAssets.handle(req, res)
-    else if ((req.url ?? '').startsWith(EDITOR_ROUTE_PREFIX)) void editorHost.handle(req, res)
     else void access.handle(req, res)
   })
   await new Promise((resolve, reject) => {
@@ -166,129 +152,10 @@ try {
   const wasmResponse = await fetch(`${origin}${envelope.viewer.wasmUrl}`, { method: 'HEAD' })
   assert.equal(wasmResponse.headers.get('content-type'), 'application/wasm')
 
-  const launchResponse = await fetch(`${origin}${envelope.editor.launchUrl}`, {
-    method: 'POST',
-    headers: { origin },
-  })
-  const launchText = await launchResponse.text()
-  assert.equal(launchResponse.status, 200, launchText)
-  const launch = JSON.parse(launchText)
-  assert.match(launch.iframeUrl, /^http:\/\/127\.0\.0\.1:\d+\/\?embed=vscode$/)
-  assert.ok(typeof launch.token === 'string' && launch.token.length > 16)
-  assert.equal(launch.docJson, sourceBytes.toString('utf8'))
-  const iframeResponse = await fetch(launch.iframeUrl)
-  assert.equal(iframeResponse.status, 200)
+  // The editor routes must be unmounted (AC-09): any editor prefix is 404.
+  const editorProbe = await fetch(`${origin}/_dsh/dsh-openpencil-lite/editor/not-found`)
+  assert.equal(editorProbe.status, 404)
 
-  // The managed editor is also the direct-drive target. Mirror one browser
-  // selection push, read it through the DSH proxy, then patch that selected
-  // node through first-party MCP and prove the live document changed.
-  const initialSelection = await editorHost.getActiveSelection()
-  assert.ok(typeof initialSelection.activePageId === 'string')
-  const selectedId = expectedFrames[0]?.id
-  assert.ok(typeof selectedId === 'string' && selectedId.length > 0)
-  const daemonOrigin = new URL(launch.iframeUrl).origin
-  const selectResponse = await fetch(`${daemonOrigin}/api/mcp/selection`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${launch.token}`,
-      'x-openpencil-token': launch.token,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ selectedIds: [selectedId], activePageId: initialSelection.activePageId }),
-  })
-  assert.equal(selectResponse.status, 200, await selectResponse.text())
-  const selected = await editorHost.getActiveSelection()
-  assert.deepEqual(selected.selectedIds, [selectedId])
-  assert.equal(selected.nodes[0]?.id, selectedId)
-  const selectionResponse = await fetch(`${origin}${launch.selectionUrl}`)
-  assert.equal(selectionResponse.status, 200)
-  assert.deepEqual((await selectionResponse.json()).selection.selectedIds, [selectedId])
-  await editorHost.callActiveMcp('update_node', {
-    nodeId: selectedId,
-    data: { name: 'DSH direct-drive smoke' },
-    ...(initialSelection.activePageId === '' ? {} : { pageId: initialSelection.activePageId }),
-  })
-  const changedSelection = await editorHost.getActiveSelection()
-  assert.equal(changedSelection.nodes[0]?.name, 'DSH direct-drive smoke')
-
-  const saveBody = {
-    sessionId: launch.sessionId,
-    docJson: `${JSON.stringify({ ...sourceDocument, dshEditorSmoke: true })}\n`,
-    generation: 1,
-    revision: 1,
-  }
-  const saveResponse = await fetch(`${origin}${launch.saveUrl}`, {
-    method: 'POST',
-    headers: { origin, 'content-type': 'application/json' },
-    body: JSON.stringify(saveBody),
-  })
-  const saveText = await saveResponse.text()
-  assert.equal(saveResponse.status, 200, saveText)
-  const saved = JSON.parse(saveText)
-  assert.equal(saved.editor.enabled, true)
-  const changedBytes = Buffer.from(saveBody.docJson)
-  assert.deepEqual(await readFile(mutableSource), changedBytes)
-
-  // A changed save returns a successor grant; after closing and recreating
-  // the controller it must reopen the latest bytes, never the old snapshot.
-  const savedCloseResponse = await fetch(`${origin}${launch.closeUrl}`, {
-    method: 'DELETE', headers: { origin, 'content-type': 'application/json' },
-    body: JSON.stringify({ sessionId: launch.sessionId, dirty: false }),
-  })
-  assert.equal(savedCloseResponse.status, 200)
-  await editorHost.dispose()
-  editorHost = new EditorHostController(editorMasterKey)
-  editorHost.attachRoute()
-  const savedReplayResponse = await fetch(`${origin}${saved.editor.launchUrl}`, {
-    method: 'POST', headers: { origin },
-  })
-  const savedReplayText = await savedReplayResponse.text()
-  assert.equal(savedReplayResponse.status, 200, savedReplayText)
-  const savedReplay = JSON.parse(savedReplayText)
-  assert.equal(savedReplay.docJson, changedBytes.toString('utf8'))
-  await fetch(`${origin}${savedReplay.closeUrl}`, {
-    method: 'DELETE', headers: { origin, 'content-type': 'application/json' },
-    body: JSON.stringify({ sessionId: savedReplay.sessionId, dirty: false }),
-  })
-
-  const conflictLaunchResponse = await fetch(`${origin}${saved.editor.launchUrl}`, {
-    method: 'POST', headers: { origin },
-  })
-  const conflictLaunch = await conflictLaunchResponse.json()
-  assert.equal(conflictLaunchResponse.status, 200, JSON.stringify(conflictLaunch))
-  await writeFile(mutableSource, '{"version":"external-change"}\n')
-  const conflictResponse = await fetch(`${origin}${conflictLaunch.saveUrl}`, {
-    method: 'POST',
-    headers: { origin, 'content-type': 'application/json' },
-    body: JSON.stringify({ ...saveBody, sessionId: conflictLaunch.sessionId, revision: 2 }),
-  })
-  assert.equal(conflictResponse.status, 409)
-  const closeResponse = await fetch(`${origin}${conflictLaunch.closeUrl}`, {
-    method: 'DELETE',
-    headers: { origin, 'content-type': 'application/json' },
-    body: JSON.stringify({ sessionId: conflictLaunch.sessionId, dirty: true }),
-  })
-  assert.equal(closeResponse.status, 200)
-
-  // Editor launch capabilities are self-contained and survive a plugin
-  // controller recreation when the persistent DSH access key is unchanged.
-  await editorHost.dispose()
-  editorHost = new EditorHostController(editorMasterKey)
-  editorHost.attachRoute()
-  await writeFile(mutableSource, sourceBytes)
-  const replayResponse = await fetch(`${origin}${envelope.editor.launchUrl}`, {
-    method: 'POST', headers: { origin },
-  })
-  const replayText = await replayResponse.text()
-  assert.equal(replayResponse.status, 200, replayText)
-  const replay = JSON.parse(replayText)
-  assert.equal(replay.docJson, sourceBytes.toString('utf8'))
-  await fetch(`${origin}${replay.closeUrl}`, {
-    method: 'DELETE', headers: { origin, 'content-type': 'application/json' },
-    body: JSON.stringify({ sessionId: replay.sessionId, dirty: false }),
-  })
-
-  detachEditor()
   detachViewer()
   detachRender()
   console.log(JSON.stringify({
@@ -302,10 +169,9 @@ try {
     sourceSha256: sourceHash,
     imageSha256: image.sha256,
     viewerAssets: true,
-    editor: true,
+    editorRoutesMounted: false,
   }, null, 2))
 } finally {
-  await editorHost?.dispose()
   if (server !== undefined) await new Promise(resolve => server.close(resolve))
   await rm(root, { recursive: true, force: true })
 }

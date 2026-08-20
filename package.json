@@ -50,7 +50,7 @@
     "sync:viewer-assets": "node scripts/sync-viewer-assets.mjs",
     "test:viewer-assets": "node scripts/test-viewer-assets.mjs",
     "test:client": "pnpm run build:client && node --test tests/client.test.mjs",
-    "test:host-api": "pnpm run build && node --test tests/host-service.test.mjs tests/new-tool.test.mjs tests/presentation-hydration.test.mjs tests/editor-host-lifecycle.test.mjs",
+    "test:host-api": "pnpm run build && node --test tests/host-service.test.mjs tests/new-tool.test.mjs tests/apply-tool.test.mjs tests/presentation-hydration.test.mjs",
     "test:mcp": "pnpm run build && node --test tests/mcp-client.test.mjs",
     "test:host": "pnpm run build && node scripts/test-host.mjs"
   },
@@ -72,7 +72,8 @@
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-tool",
         "@deepseek-ai/dsh-client-ui-slots",
-        "@deepseek-ai/dsh-client-ui-theme"
+        "@deepseek-ai/dsh-client-ui-theme",
+        "dsh-better-sidebar"
       ],
       "platform": "web"
     }
@@ -90,6 +91,7 @@
     "@deepseek-ai/dsh-sandbox-policy": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-session": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "dsh-better-sidebar": "^0.13.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

@@ -29,7 +29,6 @@ import {
   type RenderResult,
 } from './renderer.js'
 import type { ViewerAssetController } from './viewer-assets.js'
-import type { EditorHostController } from './editor-host.js'
 import { OPENPENCIL_RENDER_TOOL_NAME } from './tool-names.js'
 
 /** Session workspace the caller resolves paths against (mirrors first-party tools). */
@@ -46,14 +45,9 @@ const renderJson = (_args: unknown, value: unknown): [{ type: 'text'; text: stri
 function makePresentationMeta(
   controller: RenderAccessController,
   viewerAssets?: ViewerAssetController,
-  editorHost?: EditorHostController,
 ) {
   return (_args: unknown, value: JsonValue): JsonValue => {
-    const result = value as unknown as RenderResult
-    const editor = result.editable === true
-      ? editorHost?.grantFor(result.sourcePath, result.document?.sha256)
-      : undefined
-    return projectRenderGrant(value, controller, viewerAssets?.viewerGrant, editor)
+    return projectRenderGrant(value, controller, viewerAssets?.viewerGrant)
   }
 }
 
@@ -62,26 +56,22 @@ export interface DesignRenderArgs {
   width?: number
   height?: number
   scale?: number
-  /** Explicitly expose the original source to the managed sidebar editor. */
-  editable?: boolean
-  /** Expand the editor once on the live result card; intended for openpencil_new follow-ups. */
-  autoOpen?: boolean
 }
 
 /** Create the `openpencil_render` tool definition bound to one controller. */
 export function createDesignRenderTool(
   controller: RenderAccessController,
   viewerAssets?: ViewerAssetController,
-  editorHost?: EditorHostController,
 ) {
   return defineTool({
     name: OPENPENCIL_RENDER_TOOL_NAME,
     description: 'Render an existing OpenPencil .op design document exactly as the design canvas, '
-      + 'then show a PNG and an optional interactive read-only canvas in the conversation. '
+      + 'then show a PNG and an optional read-only interactive canvas ("Open interactive canvas"). '
       + 'Give the absolute path to a .op file (or a path relative to the session workspace). '
       + 'For a new design when no .op file exists, call openpencil_new first. '
       + 'The image appears directly in the chat; the file path is returned for further use. '
-      + 'Set editable=true when the user asks for an editable design. For the immediate render after openpencil_new, set editable=true and autoOpen=true; no extra confirmation is needed. '
+      + 'Agent design loop: create with openpencil_new, modify with openpencil_apply (or plain file tools), '
+      + 'then render again to verify. '
       + 'Leave width/height unset for design-accurate output. Width/height are only supported '
       + 'by the lower-fidelity Jian runtime fallback.',
     parameters: {
@@ -89,8 +79,6 @@ export function createDesignRenderTool(
       width: { type: 'number', description: 'Explicit logical viewport width in pixels. Omit to use the document size.' },
       height: { type: 'number', description: 'Explicit logical viewport height in pixels. Omit to use the document size.' },
       scale: { type: 'number', description: 'Pixel scale factor applied to the output (device-pixel ratio). Default 1.' },
-      editable: { type: 'boolean', description: 'Expose an Edit in sidebar action for the original .op source. Default false.' },
-      autoOpen: { type: 'boolean', description: 'Automatically expand the editor once when this is the immediate render after openpencil_new. Default false.' },
     },
     output: {
       schema: {
@@ -133,8 +121,6 @@ export function createDesignRenderTool(
             },
           },
           frameCount: { type: 'integer' },
-          editable: { type: 'boolean' },
-          autoOpenEditor: { type: 'boolean' },
           document: {
             type: 'object',
             additionalProperties: false,
@@ -150,7 +136,7 @@ export function createDesignRenderTool(
         },
       },
       render: renderJson,
-      presentationMeta: makePresentationMeta(controller, viewerAssets, editorHost),
+      presentationMeta: makePresentationMeta(controller, viewerAssets),
     },
     async execute(args: DesignRenderArgs, exec): Promise<RenderResult> {
       const input = await resolveInputFile(args.path, sessionWorkspace(exec))
@@ -242,8 +228,6 @@ export function createDesignRenderTool(
         fidelity,
         warnings,
         ...(frames === undefined ? {} : { frames, frameCount: frames.length }),
-        editable: args.editable === true,
-        ...(args.editable === true && args.autoOpen === true ? { autoOpenEditor: true } : {}),
         document,
       }
       return result

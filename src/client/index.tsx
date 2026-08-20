@@ -5,6 +5,10 @@
  * PNG remains the replay-safe default. When the host also grants access to
  * the source `.op`, the user can opt into one shared, read-only Web SDK
  * canvas. The SDK and document are fetched only after that explicit action.
+ *
+ * When `dsh-better-sidebar` is loaded, a single `openpencil:preview` sidebar
+ * tab is registered and refreshed with the session's most recent render;
+ * without it the plugin degrades to the inline card only.
  */
 
 import {
@@ -20,23 +24,19 @@ import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
-import { editorPanelCopy, ManagedOpenPencilEditor } from './editor-panel.js'
-import { editorLocaleFromDsh, type EditorColorScheme, type EditorLocale } from './editor-bridge.js'
-import {
-  requestOpenPencilEditor,
-  type CompatibleToolCallViewProps,
-  type CompatibleToolDetailsViewProps,
-} from './details-compat.js'
-import type { EditorWorkbenchRequest } from './editor-workbench-host.js'
-import { mountEditorWorkbenchHost } from './editor-workbench-host.js'
-import { editorWorkbenchEditorKey } from './editor-modal.js'
+import type { CompatibleToolCallViewProps } from './details-compat.js'
 import { FrameGallery, normalizeFrameIndex as normalizedFrameIndex } from './frame-gallery.js'
 import type { GalleryFrame, GalleryLocale } from './frame-gallery.js'
-import { OpenPencilSelectionDock } from './selection-dock.js'
 import {
   presentationHydrationRequestOf,
   requestPresentationGrant,
 } from './presentation-hydration.js'
+import {
+  getRecentRender,
+  publishRecentRender,
+  subscribeRecentRender,
+  type RecentRender,
+} from './preview-store.js'
 import {
   LEGACY_DESIGN_RENDER_TOOL_NAME,
   OPENPENCIL_RENDER_TOOL_NAME,
@@ -67,132 +67,24 @@ export {
   normalizeFrameIndex,
 } from './frame-gallery.js'
 export {
-  applyManagedEditorUnmountPolicy,
-  beginEditorInitRetry,
-  closeManagedEditorLaunch,
-  editorPanelCopy,
-  launchManagedEditor,
-  prepareManagedEditor,
-  prepareManagedEditorForMount,
-} from './editor-panel.js'
-export {
-  requestOpenPencilEditor,
-} from './details-compat.js'
-export {
-  clampEditorWorkbenchWidth,
-  confirmEditorModalClose,
-  editorModalCopy,
-  editorWorkbenchEditorKey,
-  editorWorkbenchFocusTargetIndex,
-  editorWorkbenchShouldHandleEscape,
-  editorWorkbenchUsesFullscreen,
-  editorWorkbenchWidthBounds,
-  EDITOR_WORKBENCH_FULLSCREEN_BREAKPOINT,
-  EDITOR_WORKBENCH_LEFT_CLEARANCE,
-  EDITOR_WORKBENCH_MAX_WIDTH,
-  EDITOR_WORKBENCH_MIN_WIDTH,
-  EDITOR_WORKBENCH_RESIZE_STEP,
-  resizedEditorWorkbenchWidth,
-} from './editor-modal.js'
-export {
-  claimEditorWorkbenchDock,
-  OPENPENCIL_WORKBENCH_DOCK_ATTRIBUTE,
-} from './editor-dock-layout.js'
-export {
-  createEditorWorkbenchStore,
-  mountEditorWorkbenchHost,
-  preserveEditorBeforeWorkbenchDispose,
-} from './editor-workbench-host.js'
-export {
-  editorGrantForBoot,
-  editorSuccessorFromSave,
-  editorSuccessorStorageKey,
-  rememberEditorSuccessor,
-} from './editor-successor.js'
-export {
-  captureManagedEditorRecovery,
-  discardManagedEditorRecovery,
-  editorRecoveryCopy,
-  editorRecoveryItemUrl,
-  editorRecoverySummaryOf,
-  restoreManagedEditorRecovery,
-} from './editor-recovery.js'
-
-export {
-  claimEditor,
-  confirmEditorClose,
-  editorControlUrl,
-  editorIframeUrlWithLocale,
-  editorIframeUrlWithTheme,
-  editorLocaleFromDsh,
-  editorMessageFrom,
-  editorOrigin,
-  encodeEditorOutbound,
-  parseEditorInbound,
-} from './editor-bridge.js'
-export {
-  clearOpenPencilSelection,
-  getOpenPencilSelectionSnapshot,
-  liveSelectionOf,
-  publishOpenPencilSelection,
-  subscribeOpenPencilSelection,
-} from './selection-store.js'
-export {
-  isTerminalEditorSelectionStatus,
-  startEditorSelectionPolling,
-} from './selection-polling.js'
-export {
-  hasOpenPencilSelection,
-  OPENPENCIL_SELECTION_DOCK_LAYOUT,
-  selectionNodeDetail,
-  selectionNodeLabel,
-} from './selection-dock.js'
-export {
-  documentSha256FromCanonicalResult,
+  requestPresentationGrant,
   PRESENTATION_HYDRATION_ENDPOINT,
   presentationHydrationRequestOf,
-  requestPresentationGrant,
+  documentSha256FromCanonicalResult,
 } from './presentation-hydration.js'
+export {
+  forgetSessionRenders,
+  getRecentRender,
+  publishRecentRender,
+  subscribeRecentRender,
+  type RecentRender,
+} from './preview-store.js'
 
 /** Presentation metadata key the host half projects into `block.meta`. */
 export const PRESENTATION_META_KEY = '$dshOpenPencil'
 
-const LIVE_AUTO_OPEN_TTL_MS = 15 * 60 * 1000
-const LIVE_AUTO_OPEN_MAX = 256
-const liveAutoOpenActivatedAt = Date.now()
-const liveAutoOpenCalls = new Map<string, number>()
-
-function liveAutoOpenKey(sessionId: string, callId: string): string {
-  return `${sessionId.length}:${sessionId}${callId}`
-}
-
-function pruneLiveAutoOpenCalls(now = Date.now()): void {
-  for (const [key, expiresAt] of liveAutoOpenCalls) {
-    if (expiresAt <= now) liveAutoOpenCalls.delete(key)
-  }
-  while (liveAutoOpenCalls.size > LIVE_AUTO_OPEN_MAX) {
-    const oldest = liveAutoOpenCalls.keys().next().value as string | undefined
-    if (oldest === undefined) break
-    liveAutoOpenCalls.delete(oldest)
-  }
-}
-
-function rememberLiveAutoOpenCall(key: string): void {
-  liveAutoOpenCalls.delete(key)
-  liveAutoOpenCalls.set(key, Date.now() + LIVE_AUTO_OPEN_TTL_MS)
-  pruneLiveAutoOpenCalls()
-}
-
-function takeLiveAutoOpenCall(key: string): boolean {
-  pruneLiveAutoOpenCalls()
-  if (!liveAutoOpenCalls.has(key)) return false
-  liveAutoOpenCalls.delete(key)
-  return true
-}
-
-function forgetLiveAutoOpenCall(key: string): void {
-  liveAutoOpenCalls.delete(key)
-}
+/** Sidebar tab type owned by this plugin (registered when better-sidebar is present). */
+export const OPENPENCIL_PREVIEW_TAB_TYPE = 'openpencil:preview' as const
 
 export type PresentationLocale = GalleryLocale
 
@@ -206,11 +98,9 @@ const DESIGN_RENDER_COPY = {
     renderFailed: 'The render failed.',
     frames: 'frames',
     openInteractiveCanvas: 'Open interactive canvas',
-    editCanvas: 'Edit canvas',
-    editInSidebar: 'Edit in sidebar',
     openRenderedPng: 'Open rendered PNG',
     downloadPng: 'Download PNG',
-    editSource: 'Edit source .op',
+    editSource: 'Open source .op',
     downloadSource: 'Download source .op',
     inspectToolCall: 'Inspect tool call',
     recoveringPreview: 'Recovering the OpenPencil preview…',
@@ -227,7 +117,10 @@ const DESIGN_RENDER_COPY = {
     openPngFallback: 'Open PNG fallback',
     panHint: 'Drag to pan · scroll to pan · Ctrl/⌘ + scroll to zoom',
     snapshot: 'snapshot',
-    editorUnavailable: 'Editable OpenPencil canvas is not available for this result.',
+    previewTab: 'OpenPencil preview',
+    previewTabEmpty: 'No render yet for this session.',
+    previewTabEmptyHint: 'Ask the agent to run openpencil_render to see the design preview here.',
+    openSource: 'Open source .op',
   },
   zh: {
     designRender: 'OpenPencil 渲染',
@@ -238,11 +131,9 @@ const DESIGN_RENDER_COPY = {
     renderFailed: '渲染失败。',
     frames: '页',
     openInteractiveCanvas: '打开交互画布',
-    editCanvas: '编辑画布',
-    editInSidebar: '在侧边栏编辑',
     openRenderedPng: '打开渲染 PNG',
     downloadPng: '下载 PNG',
-    editSource: '编辑源文件 .op',
+    editSource: '打开源文件 .op',
     downloadSource: '下载源文件 .op',
     inspectToolCall: '检查工具调用',
     recoveringPreview: '正在恢复 OpenPencil 预览…',
@@ -259,7 +150,10 @@ const DESIGN_RENDER_COPY = {
     openPngFallback: '打开 PNG 预览',
     panHint: '拖动平移 · 滚动平移 · Ctrl/⌘ + 滚动缩放',
     snapshot: '快照',
-    editorUnavailable: '此渲染结果没有可用的 OpenPencil 编辑画布。',
+    previewTab: 'OpenPencil 预览',
+    previewTabEmpty: '当前会话还没有渲染结果。',
+    previewTabEmptyHint: '请让 Agent 执行 openpencil_render，设计预览会显示在这里。',
+    openSource: '打开源文件 .op',
   },
 } as const
 
@@ -288,24 +182,16 @@ export interface ViewerGrant {
   canvasKitBaseUrl: string
 }
 
-export interface EditorGrant {
-  enabled: true
-  launchUrl: string
-  refreshUrl?: string
-}
-
 export interface PresentationGrant {
   schemaVersion: 1 | 2
   image?: ImageGrant
   frames?: ImageGrant[]
   document?: DocumentGrant
   viewer?: ViewerGrant
-  editor?: EditorGrant
   renderer?: string
   rendererBinary?: string
   fidelity?: string
   warnings?: string[]
-  autoOpenEditor?: boolean
 }
 
 function optionalString(record: Record<string, unknown>, key: string): string | undefined {
@@ -385,14 +271,6 @@ function viewerGrantOf(value: unknown): ViewerGrant | undefined {
   return { sdkUrl, wasmUrl, canvasKitBaseUrl }
 }
 
-function editorGrantOf(value: unknown): EditorGrant | undefined {
-  if (!isRecord(value) || value.enabled !== true) return undefined
-  const launchUrl = optionalString(value, 'launchUrl')
-  if (launchUrl === undefined) return undefined
-  const refreshUrl = optionalString(value, 'refreshUrl')
-  return { enabled: true, launchUrl, ...(refreshUrl === undefined ? {} : { refreshUrl }) }
-}
-
 /** Parse both the established v1 envelope and the additive v2 shape. */
 export function presentationGrantOfMeta(metaValue: unknown): PresentationGrant | undefined {
   const meta = isRecord(metaValue) ? metaValue : undefined
@@ -408,12 +286,10 @@ export function presentationGrantOfMeta(metaValue: unknown): PresentationGrant |
     frames: frames ?? (image === undefined ? undefined : [image]),
     document,
     viewer: viewerGrantOf(envelope.viewer),
-    editor: editorGrantOf(envelope.editor),
     renderer: optionalString(envelope, 'renderer'),
     rendererBinary: optionalString(envelope, 'rendererBinary'),
     fidelity: optionalString(envelope, 'fidelity'),
     warnings: optionalStrings(envelope, 'warnings'),
-    ...(envelope.autoOpenEditor === true ? { autoOpenEditor: true } : {}),
   }
 }
 
@@ -570,6 +446,20 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
     justifyContent: 'center', flexDirection: 'column', gap: 10,
     padding: 24, textAlign: 'center', background: 'rgba(25,25,28,0.92)',
+  },
+  tabBody: {
+    display: 'flex', flexDirection: 'column', gap: 10, padding: 12, fontSize: 12,
+  },
+  tabEmpty: {
+    padding: 16, textAlign: 'center', color: 'var(--ui-text-muted, #888)', fontSize: 12,
+  },
+  tabHeader: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    gap: 8, color: 'var(--ui-text-muted, #888)',
+  },
+  tabActions: {
+    display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10,
+    color: 'var(--ui-text-muted, #888)',
   },
 }
 
@@ -743,22 +633,125 @@ function CanvasModal({ grant, onClose, locale }: {
   )
 }
 
+/** Open-tab seed the plugin pushes once its `openpencil:preview` tab registers. */
+interface PreviewOpenTabSeed {
+  type: typeof OPENPENCIL_PREVIEW_TAB_TYPE
+  path?: string
+  sessionId?: string
+}
+
+let previewOpenTab: ((seed: PreviewOpenTabSeed) => void) | undefined
+
+/** Structural subset of dsh-better-sidebar's TabComponentProps. */
+interface SidebarPreviewTabProps {
+  ctx: unknown
+  scope: { sessionId?: string }
+  tab: unknown
+  visible: boolean
+  expanded?: string[]
+  onToggleDir?: (path: string) => void
+  onReferenceFile?: (path: string) => void
+  onOpenFile?: (path: string) => void
+  onOpenDiff?: (tab: unknown) => void
+  onSubagentJump?: (childSessionId: string) => void
+  locale?: PresentationLocale
+}
+
+function openModalCanvas(
+  setModalToken: React.Dispatch<React.SetStateAction<symbol | undefined>>,
+  releaseRef: React.MutableRefObject<(() => void) | undefined>,
+): void {
+  const token = Symbol('openpencil-preview-canvas')
+  releaseRef.current?.()
+  releaseRef.current = claimCanvas(token, () => {
+    setModalToken(current => current === token ? undefined : current)
+  })
+  setModalToken(token)
+}
+
+function closeModalCanvas(
+  setModalToken: React.Dispatch<React.SetStateAction<symbol | undefined>>,
+  releaseRef: React.MutableRefObject<(() => void) | undefined>,
+): void {
+  releaseRef.current?.()
+  releaseRef.current = undefined
+  setModalToken(undefined)
+}
+
+/** The `openpencil:preview` sidebar tab: latest render of the session. */
+export function OpenPencilPreviewTab(props: SidebarPreviewTabProps): React.JSX.Element {
+  const { scope, onOpenFile, locale = 'en' } = props
+  const copy = designRenderCopy(locale)
+  const sessionId = typeof scope?.sessionId === 'string' ? scope.sessionId : undefined
+  const recent: RecentRender | undefined = useSyncExternalStore(
+    subscribeRecentRender,
+    () => (sessionId === undefined ? undefined : getRecentRender(sessionId)),
+    () => (sessionId === undefined ? undefined : getRecentRender(sessionId)),
+  )
+  const grant = isRecord(recent?.grants) ? (recent.grants as unknown as PresentationGrant) : undefined
+  const frames = grant?.frames ?? []
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const currentIndex = normalizedFrameIndex(selectedIndex, frames.length)
+  const selectedFrame = frames[currentIndex] ?? grant?.image
+  const [modalToken, setModalToken] = useState<symbol>()
+  const releaseRef = useRef<() => void>()
+  useEffect(() => () => { releaseRef.current?.() }, [])
+  useEffect(() => { setSelectedIndex(0) }, [frames.map(frame => frame.previewUrl).join('\n')])
+
+  if (recent === undefined || grant === undefined) {
+    return (
+      <div style={styles.tabEmpty} data-openpencil-preview-tab="empty">
+        <strong>{copy.previewTabEmpty}</strong>
+        <div style={{ marginTop: 6 }}>{copy.previewTabEmptyHint}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={styles.tabBody} data-openpencil-preview-tab="ready">
+      <div style={styles.tabHeader}>
+        <span>{baseName(recent.path)}</span>
+        {frames.length > 1 ? <span>{frames.length} {copy.frames}</span> : null}
+      </div>
+      {frames.length > 0 ? (
+        <FrameGallery frames={frames} selectedIndex={currentIndex} onSelect={setSelectedIndex} locale={locale} />
+      ) : selectedFrame !== undefined ? (
+        <div style={styles.imageViewport}><img style={styles.img} src={selectedFrame.previewUrl} alt={selectedFrame.name ?? baseName(selectedFrame.path)} /></div>
+      ) : null}
+      <div style={styles.tabActions}>
+        {grant.renderer !== undefined ? (
+          <span title={grant.rendererBinary}>{grant.renderer}{grant.fidelity === undefined ? '' : ` · ${grant.fidelity}`}</span>
+        ) : null}
+        {grant.document?.sha256 !== undefined ? <span title={grant.document.sha256}>sha256 {grant.document.sha256.slice(0, 10)}</span> : null}
+      </div>
+      <div style={styles.tabActions}>
+        {grant.document !== undefined && grant.viewer !== undefined ? (
+          <button type="button" style={styles.primaryButton} onClick={() => { openModalCanvas(setModalToken, releaseRef) }}>{copy.openInteractiveCanvas}</button>
+        ) : null}
+        {selectedFrame !== undefined ? <a style={styles.link} href={selectedFrame.downloadUrl} download>{copy.downloadPng}</a> : null}
+        {grant.document?.downloadUrl !== undefined ? <a style={styles.link} href={grant.document.downloadUrl} download>{copy.downloadSource}</a> : null}
+        {grant.document?.path !== undefined && typeof onOpenFile === 'function' ? (
+          <button type="button" style={styles.button} onClick={() => { onOpenFile(grant.document?.path ?? '') }}>{copy.openSource}</button>
+        ) : null}
+      </div>
+      {modalToken !== undefined && grant.document !== undefined && grant.viewer !== undefined
+        ? <CanvasModal grant={grant} onClose={() => { closeModalCanvas(setModalToken, releaseRef) }} locale={locale} />
+        : null}
+    </div>
+  )
+}
+
 /** Render one OpenPencil render tool call as a PNG-first card. */
 export function DesignRenderView({
   block,
   callId,
   toolName,
-  openDetails,
   openFile,
   inspect,
   locale = 'en',
   sessionId,
-  openEditorWorkbench,
-  autoOpenEditorWorkbench,
 }: CompatibleToolCallViewProps & {
   locale?: PresentationLocale
-  openEditorWorkbench?: (request: EditorWorkbenchRequest) => boolean | Promise<boolean>
-  autoOpenEditorWorkbench?: (request: EditorWorkbenchRequest) => boolean | Promise<boolean>
 }) {
   const settled = 'kind' in block
   const error = settled && block.isError
@@ -789,7 +782,6 @@ export function DesignRenderView({
   const selectedFrame = frames[currentFrameIndex] ?? grant?.image
   const [modalToken, setModalToken] = useState<symbol>()
   const releaseRef = useRef<() => void>()
-  const liveAutoOpenCallKey = liveAutoOpenKey(String(sessionId), callId)
 
   useEffect(() => {
     if (hydrationKey === undefined || hydrationRequest === undefined) return
@@ -806,48 +798,16 @@ export function DesignRenderView({
     // itself would restart a local exchange whenever DSH reprojects a snapshot.
   }, [hydrationKey])
 
-  const closeCanvas = useCallback(() => {
-    releaseRef.current?.()
-    releaseRef.current = undefined
-    setModalToken(undefined)
-  }, [])
-
-  const openCanvas = useCallback(() => {
-    const token = Symbol('openpencil-canvas')
-    releaseRef.current?.()
-    releaseRef.current = claimCanvas(token, () => {
-      setModalToken((current) => current === token ? undefined : current)
-    })
-    setModalToken(token)
-  }, [])
-
-  const openEditor = useCallback(() => {
-    // A nested Code-mode result has no durable `block.meta`, so DSH's native
-    // details owner would receive the unhydrated block. Keep that recovered
-    // grant in our page-owned workbench instead. Embedded metadata continues
-    // to prefer the native details surface.
-    requestOpenPencilEditor(embeddedGrant === undefined ? undefined : openDetails, () => {
-      if (grant === undefined) return
-      void openEditorWorkbench?.({ grant, sessionId: String(sessionId) })
-    })
-  }, [embeddedGrant, grant, openDetails, openEditorWorkbench, sessionId])
-
+  // Settle: publish the session's most recent render and focus the preview tab.
+  const settleGrant = !running && !error ? grant : undefined
   useEffect(() => {
-    if (running && block.time >= liveAutoOpenActivatedAt) rememberLiveAutoOpenCall(liveAutoOpenCallKey)
-    else if (error) forgetLiveAutoOpenCall(liveAutoOpenCallKey)
-  }, [error, liveAutoOpenCallKey, running])
-
-  useEffect(() => {
-    if (
-      running
-      || error
-      || grant?.autoOpenEditor !== true
-      || grant.editor?.enabled !== true
-      || autoOpenEditorWorkbench === undefined
-    ) return
-    if (!takeLiveAutoOpenCall(liveAutoOpenCallKey)) return
-    void autoOpenEditorWorkbench({ grant, sessionId: String(sessionId) })
-  }, [autoOpenEditorWorkbench, error, grant, liveAutoOpenCallKey, running, sessionId])
+    if (settleGrant === undefined) return
+    const sourcePath = settleGrant.document?.path ?? settleGrant.image?.path
+    if (sourcePath === undefined) return
+    const sid = String(sessionId)
+    publishRecentRender(sid, sourcePath, settleGrant)
+    previewOpenTab?.({ type: OPENPENCIL_PREVIEW_TAB_TYPE, path: sourcePath, sessionId: sid })
+  }, [settleGrant])
 
   useEffect(() => () => { releaseRef.current?.() }, [])
   useEffect(() => { setSelectedFrameIndex(0) }, [frames.map(frame => frame.previewUrl).join('\n')])
@@ -857,6 +817,15 @@ export function DesignRenderView({
     : running
       ? <span style={{ ...styles.badge, ...styles.badgeRunning }}>{copy.rendering}</span>
       : <span style={{ ...styles.badge, ...styles.badgeOk }}>{copy.done}</span>
+
+  const openCanvas = useCallback(() => {
+    const token = Symbol('openpencil-canvas')
+    releaseRef.current?.()
+    releaseRef.current = claimCanvas(token, () => {
+      setModalToken((current) => current === token ? undefined : current)
+    })
+    setModalToken(token)
+  }, [])
 
   return (
     <section style={styles.card} data-tool={OPENPENCIL_RENDER_TOOL_NAME} data-state={error ? 'error' : running ? 'running' : 'success'}>
@@ -878,11 +847,6 @@ export function DesignRenderView({
               <span title={grant.rendererBinary}>{grant.renderer}{grant.fidelity === undefined ? '' : ` · ${grant.fidelity}`}</span>
             ) : null}
             {grant.document !== undefined && grant.viewer !== undefined ? <button type="button" style={styles.primaryButton} onClick={openCanvas}>{copy.openInteractiveCanvas}</button> : null}
-            {grant.document !== undefined && grant.editor?.enabled === true ? (
-              <button type="button" style={styles.primaryButton} onClick={openEditor}>
-                {openDetails === undefined || embeddedGrant === undefined ? copy.editCanvas : copy.editInSidebar}
-              </button>
-            ) : null}
             {selectedFrame !== undefined && openFile !== undefined ? (
               <button type="button" style={styles.button} onClick={() => { openFile(selectedFrame.path) }}>{copy.openRenderedPng}</button>
             ) : null}
@@ -901,87 +865,59 @@ export function DesignRenderView({
           <><p style={styles.muted}>{copy.noPreview}</p>{text !== null ? <pre style={{ ...styles.pre, marginTop: 8 }}>{text}</pre> : null}</>
         ) : null}
       </div>
-      {modalToken !== undefined && grant?.document !== undefined && grant.viewer !== undefined ? <CanvasModal grant={grant} onClose={closeCanvas} locale={locale} /> : null}
+      {modalToken !== undefined && grant?.document !== undefined && grant.viewer !== undefined ? <CanvasModal grant={grant} onClose={() => { closeModalCanvas(setModalToken, releaseRef) }} locale={locale} /> : null}
     </section>
   )
 }
 
-/** Render the selected editable design inside DSH's resident details column. */
-export function OpenPencilEditorPanel({ block, colorScheme, locale, sessionId }: CompatibleToolDetailsViewProps & {
-  colorScheme: EditorColorScheme
-  locale: EditorLocale
-}) {
-  const grant = grantOf(block)
-  if (grant?.editor === undefined || grant.document === undefined) {
-    return <div style={styles.overlay}>{editorPanelCopy(locale).unavailable}</div>
-  }
-  return <ManagedOpenPencilEditor
-    key={editorWorkbenchEditorKey(grant, String(sessionId))}
-    grant={grant}
-    colorScheme={colorScheme}
-    locale={locale}
-    sessionId={String(sessionId)}
-  />
-}
-
 /** Required client services. */
-export const inject = ['slots', 'theme', 'locale']
+export const inject = ['slots', 'locale']
 
-/** Register canonical views plus a presentation-only alias for replaying historical cards. */
+/** Register the canonical render view plus the optional sidebar preview tab. */
 export function apply(ctx: ClientContext): void {
-  const subscribeTheme = (notify: () => void): (() => boolean) => ctx.on('theme/change', notify)
-  const getColorScheme = (): EditorColorScheme => ctx.theme.getTheme().active.colorScheme
   const subscribeLocale = (notify: () => void): (() => boolean) => ctx.on('locale/change', notify)
   const getLocale = (): PresentationLocale => ctx.locale.getLocale().active
-  const getEditorLocale = (): EditorLocale => editorLocaleFromDsh(getLocale())
-  let editorWorkbenchHost: ReturnType<typeof mountEditorWorkbenchHost> | undefined
-  if (typeof document !== 'undefined') {
-    ctx.effect(() => {
-      const host = mountEditorWorkbenchHost({
-        subscribeTheme,
-        getColorScheme,
-        subscribeLocale,
-        getLocale,
-      })
-      editorWorkbenchHost = host
-      return () => {
-        if (editorWorkbenchHost === host) editorWorkbenchHost = undefined
-        return host.dispose()
-      }
-    }, 'dsh-openpencil: fallback editor workbench host')
-  }
+
   const HostSyncedDesignRenderView = (props: ToolCallViewProps): React.JSX.Element => {
     const locale = useSyncExternalStore(subscribeLocale, getLocale, getLocale)
-    return (
-      <DesignRenderView
-        {...props}
-        locale={locale}
-        openEditorWorkbench={request => editorWorkbenchHost?.open(request) ?? false}
-        autoOpenEditorWorkbench={request => editorWorkbenchHost?.openIfIdle(request) ?? false}
-      />
-    )
-  }
-  const HostSyncedOpenPencilEditorPanel = (props: CompatibleToolDetailsViewProps): React.JSX.Element => {
-    const colorScheme = useSyncExternalStore(subscribeTheme, getColorScheme, getColorScheme)
-    const locale = useSyncExternalStore(subscribeLocale, getEditorLocale, getEditorLocale)
-    return <OpenPencilEditorPanel {...props} colorScheme={colorScheme} locale={locale} />
-  }
-  const HostSyncedOpenPencilSelectionDock = (props: Omit<React.ComponentProps<typeof OpenPencilSelectionDock>, 'locale'>): React.JSX.Element => {
-    const locale = useSyncExternalStore(subscribeLocale, getLocale, getLocale)
-    return <OpenPencilSelectionDock {...props} locale={locale} />
+    return <DesignRenderView {...props} locale={locale} />
   }
   for (const toolName of [OPENPENCIL_RENDER_TOOL_NAME, LEGACY_DESIGN_RENDER_TOOL_NAME]) {
     ctx.slots.inject('tool.call.toolview', () => ctx.slots.register(
       { name: 'tool.call.toolview', key: toolName },
       HostSyncedDesignRenderView,
     ))
-    ctx.slots.inject('tool.details.toolview', () => ctx.slots.register(
-      { name: 'tool.details.toolview', key: toolName },
-      HostSyncedOpenPencilEditorPanel,
-    ))
   }
-  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register(
-    { name: 'conversation.input.dock', id: 'openpencil-selection', order: 30 },
-    HostSyncedOpenPencilSelectionDock,
-  ))
+
+  // Optional better-sidebar preview tab. This fiber only runs when the
+  // service is provided; without it the plugin degrades to inline cards.
+  ctx.inject(['betterSidebar'], (injectedCtx) => {
+    const sidebar = (injectedCtx as unknown as { betterSidebar?: unknown }).betterSidebar
+    if (sidebar === null || typeof sidebar !== 'object') return () => {}
+    const service = sidebar as {
+      registerTab?: (descriptor: unknown) => () => void
+      openTab?: (seed: unknown, scope?: unknown) => void
+    }
+    if (typeof service.registerTab !== 'function' || typeof service.openTab !== 'function') return () => {}
+    const { registerTab, openTab: sideOpenTab } = service
+    const openTab = (seed: PreviewOpenTabSeed): void => {
+      sideOpenTab(
+        { type: OPENPENCIL_PREVIEW_TAB_TYPE, ...(seed.path === undefined ? {} : { path: seed.path }) },
+        seed.sessionId === undefined ? undefined : { sessionId: seed.sessionId },
+      )
+    }
+    previewOpenTab = openTab
+    const dispose = registerTab({
+      id: OPENPENCIL_PREVIEW_TAB_TYPE,
+      title: () => designRenderCopy(getLocale()).previewTab,
+      single: true,
+      component: (props: SidebarPreviewTabProps) => (
+        <OpenPencilPreviewTab {...props} locale={getLocale()} />
+      ),
+    })
+    return () => {
+      dispose()
+      if (previewOpenTab === openTab) previewOpenTab = undefined
+    }
+  })
 }

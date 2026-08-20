@@ -26,17 +26,6 @@ test('surfaces JSON-RPC, MCP isError, and transactional applied=false failures',
   }), /line 2 failed/)
 })
 
-test('projects a bounded selection snapshot with id-only fallbacks', () => {
-  const selection = mcp.selectionSnapshotFromMcp('/tmp/demo.op', {
-    activePageId: 'p1', selectedIds: ['n1', '', 7],
-    nodes: [{ id: 'n1', type: 'frame', name: 'Home', x: 1, y: 2, width: 375, height: 812 }, { nope: true }],
-  }, 123)
-  assert.deepEqual(selection, {
-    sourcePath: '/tmp/demo.op', activePageId: 'p1', selectedIds: ['n1'], updatedAt: 123,
-    nodes: [{ id: 'n1', type: 'frame', name: 'Home', x: 1, y: 2, width: 375, height: 812 }],
-  })
-})
-
 test('version probes time out even when the daemon never responds', async () => {
   const fetcher = (_url, init) => new Promise((_resolve, reject) => {
     init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true })

@@ -44,7 +44,7 @@ export function createDesignNewTool(editorHost: EditorHostController, services: 
   return defineTool({
     name: OPENPENCIL_NEW_TOOL_NAME,
     description: 'Create and save a brand-new OpenPencil .op design from one transactional batch_design program. '
-      + 'Use this for natural-language requests to make a new design when no .op file or live editor exists. '
+      + 'Use this for natural-language requests to make a new design when no .op file exists. '
       + 'Do not inspect or hand-write .op JSON and do not ask the user to open a sidebar. '
       + 'Choose a concise workspace-relative .op filename when the user did not specify one. '
       + 'This is a local OpenPencil-host operation and requires the session Workspace Write permission. '
@@ -54,7 +54,7 @@ export function createDesignNewTool(editorHost: EditorHostController, services: 
       + `For requested photography, add these valid lines in the same batch: ${IMAGE_OPERATION_EXAMPLE}. `
       + 'Use OpenPencil image search or an editable placeholder without pausing for external image-service setup; do not ask image-provider questions unless the user explicitly requested external generation. '
       + 'All operations apply together and the resulting document is saved atomically. '
-      + 'After success, immediately call openpencil_render with the returned path, editable=true, and autoOpen=true to show and automatically expand the editor once.',
+      + 'After success, immediately call openpencil_render with the returned path to show the design and verify it.',
     parameters: {
       path: {
         type: 'string', required: true,
@@ -150,7 +150,7 @@ export function createDesignNewTool(editorHost: EditorHostController, services: 
         applied: true as const,
         saved: true as const,
         ...(isRecord(batch.result) ? { result: batch.result } : {}),
-        note: `Created and saved ${processPath}. Call openpencil_render with this path, editable=true, and autoOpen=true now.`,
+        note: `Created and saved ${processPath}. Call openpencil_render with this path now to show the design and verify it.`,
       }
     },
     presentCall: (args: DesignNewArgs) => ({

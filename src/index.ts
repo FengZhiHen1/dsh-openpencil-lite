@@ -1,7 +1,7 @@
 /**
  * dsh-openpencil-lite — preview and design `.op` documents in DSH.
  *
- * Plugin lifecycle: register the model-facing tool plus signed routes for
+ * Plugin lifecycle: register the model-facing tools plus signed routes for
  * exact PNGs, immutable document snapshots, and the optional read-only Web
  * SDK canvas. Everything is
  * registered through `ctx.effect` (or a returned disposer) so unloading the
@@ -29,28 +29,17 @@ import {
   prepareRenderAccessKey,
 } from './renderer.js'
 import { createDesignRenderTool } from './tool.js'
-import {
-  createDesignCreateTool,
-  createDesignEditTool,
-  createDesignSelectionTool,
-} from './design-tools.js'
 import { createDesignNewTool } from './new-tool.js'
 import { createDesignApplyTool } from './apply-tool.js'
 import {
   VIEWER_ASSET_ROUTE_PREFIX,
   prepareViewerAssets,
 } from './viewer-assets.js'
-import {
-  EDITOR_ROUTE_PREFIX,
-  EditorHostController,
-} from './editor-host.js'
+import { EditorHostController } from './editor-host.js'
 import {
   OPENPENCIL_APPLY_TOOL_NAME,
-  OPENPENCIL_CREATE_TOOL_NAME,
-  OPENPENCIL_EDIT_TOOL_NAME,
   OPENPENCIL_NEW_TOOL_NAME,
   OPENPENCIL_RENDER_TOOL_NAME,
-  OPENPENCIL_SELECTION_TOOL_NAME,
   OPENPENCIL_TOOL_NAMES,
 } from './tool-names.js'
 import {
@@ -61,11 +50,8 @@ import {
 export {
   LEGACY_DESIGN_RENDER_TOOL_NAME,
   OPENPENCIL_APPLY_TOOL_NAME,
-  OPENPENCIL_CREATE_TOOL_NAME,
-  OPENPENCIL_EDIT_TOOL_NAME,
   OPENPENCIL_NEW_TOOL_NAME,
   OPENPENCIL_RENDER_TOOL_NAME,
-  OPENPENCIL_SELECTION_TOOL_NAME,
   OPENPENCIL_TOOL_NAMES,
 } from './tool-names.js'
 
@@ -113,12 +99,11 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const accessKey = await prepareRenderAccessKey()
   const controller = new RenderAccessController(accessKey)
   const viewerAssets = await prepareViewerAssets()
-  const editorHost = new EditorHostController(accessKey)
+  const editorHost = new EditorHostController()
   const presentationHydration = new PresentationHydrationController({
     sessions: hostCtx.sessions,
     render: controller,
     viewer: viewerAssets,
-    editor: editorHost,
     // webRuntime is provided after bind by the official Web bundle. Resolve
     // it at request time so loopback still works on older/headless hosts while
     // configured LAN authorities receive the same Host fence as DSH /api.
@@ -133,37 +118,23 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   // Tool registration: global (every agent sees it). The tool's
   // presentationMeta consults `controller.routeAvailable`, so a profile
   // without the webserver still gets a plain-JSON result — no dangling URL.
+  const designOutputServices = {
+    fs: hostCtx.fs,
+    sandboxPolicy: hostCtx.sandboxPolicy,
+    observe: (target: FsTarget, observation: FsObservation, exec: ToolRunContext) =>
+      eventCtx.emit('fs/observed', target, observation, exec),
+  }
   disposers.push(ctx.effect(
-    () => hostCtx.tools.register(createDesignRenderTool(controller, viewerAssets, editorHost)),
+    () => hostCtx.tools.register(createDesignRenderTool(controller, viewerAssets)),
     `dsh-openpencil-lite: ${OPENPENCIL_RENDER_TOOL_NAME} tool`,
   ))
   disposers.push(ctx.effect(
-    () => hostCtx.tools.register(createDesignSelectionTool(editorHost)),
-    `dsh-openpencil-lite: ${OPENPENCIL_SELECTION_TOOL_NAME} tool`,
-  ))
-  disposers.push(ctx.effect(
-    () => hostCtx.tools.register(createDesignNewTool(editorHost, {
-      fs: hostCtx.fs,
-      sandboxPolicy: hostCtx.sandboxPolicy,
-      observe: (target, observation, exec) => eventCtx.emit('fs/observed', target, observation, exec),
-    })),
+    () => hostCtx.tools.register(createDesignNewTool(editorHost, designOutputServices)),
     `dsh-openpencil-lite: ${OPENPENCIL_NEW_TOOL_NAME} tool`,
   ))
   disposers.push(ctx.effect(
-    () => hostCtx.tools.register(createDesignApplyTool(editorHost, {
-      fs: hostCtx.fs,
-      sandboxPolicy: hostCtx.sandboxPolicy,
-      observe: (target, observation, exec) => eventCtx.emit('fs/observed', target, observation, exec),
-    })),
+    () => hostCtx.tools.register(createDesignApplyTool(editorHost, designOutputServices)),
     `dsh-openpencil-lite: ${OPENPENCIL_APPLY_TOOL_NAME} tool`,
-  ))
-  disposers.push(ctx.effect(
-    () => hostCtx.tools.register(createDesignCreateTool(editorHost)),
-    `dsh-openpencil-lite: ${OPENPENCIL_CREATE_TOOL_NAME} tool`,
-  ))
-  disposers.push(ctx.effect(
-    () => hostCtx.tools.register(createDesignEditTool(editorHost)),
-    `dsh-openpencil-lite: ${OPENPENCIL_EDIT_TOOL_NAME} tool`,
   ))
   disposers.push(ctx.effect(
     () => eventCtx.on('tools/result', (exec, result) => presentationHydration.observeToolResult(exec, result)),
@@ -205,15 +176,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
           }
         })()
       : undefined
-    const detachEditor = editorHost.attachRoute()
-    const disposeEditorRoute = webServer.register({
-      kind: 'prefix',
-      path: EDITOR_ROUTE_PREFIX,
-      handler: (req, res) => editorHost.handle(req, res),
-    })
     return async () => {
-      disposeEditorRoute()
-      detachEditor()
       disposeViewerRoute?.()
       disposePresentationRoute()
       disposeRoute()
@@ -222,7 +185,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
     }
   }, 'dsh-openpencil-lite: render route'))
 
-  ctx.logger.info(`dsh-openpencil-lite mounted (${OPENPENCIL_TOOL_NAMES.join(' + ')}; viewer assets: ${viewerAssets.available ? 'ready' : 'unavailable'}; editor: ${editorHost.available ? 'ready' : 'unavailable'})`)
+  ctx.logger.info(`dsh-openpencil-lite mounted (${OPENPENCIL_TOOL_NAMES.join(' + ')}; viewer assets: ${viewerAssets.available ? 'ready' : 'unavailable'}; headless daemon: ${editorHost.available ? 'ready' : 'unavailable'})`)
   return async () => {
     for (const dispose of disposers.reverse()) await dispose()
     await disposeEditorHost()

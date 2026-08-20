@@ -7,8 +7,8 @@
  * `tool/result` presentation metadata from that event. The browser can ask
  * this same-origin endpoint to re-project that metadata without submitting
  * any path or tool result of its own. Live results are remembered briefly so
- * an explicitly requested editor grant can be restored; replayed durable
- * events are preview-only.
+ * the preview envelope can be restored; replayed durable events are
+ * preview-only.
  *
  * @module dsh-openpencil-lite/presentation-hydration
  */
@@ -18,7 +18,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { basename, isAbsolute, join } from 'node:path'
 import { SessionId, type SessionStore } from '@deepseek-ai/dsh-session'
 import type { JsonValue, ToolExecution, ToolExecutionResult } from '@deepseek-ai/dsh-tools'
-import { isLoopbackRemoteAddress, type EditorHostController } from './editor-host.js'
 import {
   MAX_DOCUMENT_BYTES,
   MAX_RENDER_BYTES,
@@ -59,7 +58,6 @@ interface LiveAuthorizationRecord {
   bytes: number
   documentSha256: string
   sourcePath?: string
-  editable: boolean
   resultDigest: string
 }
 
@@ -97,7 +95,6 @@ interface PresentationHydrationDependencies {
   sessions: Pick<SessionStore, 'get'>
   render: RenderAccessController
   viewer?: Pick<ViewerAssetController, 'viewerGrant'>
-  editor?: Pick<EditorHostController, 'grantFor'>
   /** DSH Web authorities derived from `webRuntime.trustedHosts`. */
   trustedHosts?: readonly string[] | (() => readonly string[])
 }
@@ -174,8 +171,7 @@ const RESULT_KEYS = new Set([
   'path', 'filename', 'mimeType', 'kind', 'description', 'sourceTool',
   'previewIntent', 'bytes', 'width', 'height', 'sha256', 'sourcePath',
   'renderer', 'rendererBinary', 'fidelity', 'warnings', 'frames',
-  'frameCount', 'editable', 'document', 'note',
-  'autoOpenEditor',
+  'frameCount', 'document', 'note',
 ])
 
 /**
@@ -203,8 +199,6 @@ export function parseHydratableRenderResult(value: unknown): RenderResult | unde
     || (value.renderer !== undefined && value.renderer !== 'openpencil' && value.renderer !== 'jian')
     || (value.rendererBinary !== undefined && !isSafeString(value.rendererBinary))
     || (value.fidelity !== undefined && value.fidelity !== 'exact' && value.fidelity !== 'runtime-preview')
-    || (value.editable !== undefined && typeof value.editable !== 'boolean')
-    || (value.autoOpenEditor !== undefined && typeof value.autoOpenEditor !== 'boolean')
     || (value.note !== undefined && !isSafeString(value.note))
   ) return undefined
 
@@ -295,25 +289,25 @@ function isTrustedAuthority(hostUrl: URL, trustedHosts: readonly string[]): bool
 }
 
 /** Mirror DSH's Host / Fetch-Metadata / Origin browser-trust fence. */
-function requestAuthority(req: IncomingMessage, trustedHosts: readonly string[]): { editorAllowed: boolean } | undefined {
+function requestAuthority(req: IncomingMessage, trustedHosts: readonly string[]): boolean {
   const host = req.headers.host
-  if (typeof host !== 'string') return undefined
+  if (typeof host !== 'string') return false
   const hostUrl = parseAuthority(host)
-  if (hostUrl === undefined) return undefined
+  if (hostUrl === undefined) return false
   const loopback = isLoopbackHostname(hostUrl.hostname)
-  if (!loopback && !isTrustedAuthority(hostUrl, trustedHosts)) return undefined
-  if (req.headers['sec-fetch-site'] === 'cross-site') return undefined
+  if (!loopback && !isTrustedAuthority(hostUrl, trustedHosts)) return false
+  if (req.headers['sec-fetch-site'] === 'cross-site') return false
 
   const rawOrigin = req.headers.origin
   if (rawOrigin !== undefined) {
-    if (typeof rawOrigin !== 'string') return undefined
+    if (typeof rawOrigin !== 'string') return false
     try {
-      if (new URL(rawOrigin).host !== hostUrl.host) return undefined
+      if (new URL(rawOrigin).host !== hostUrl.host) return false
     } catch {
-      return undefined
+      return false
     }
   }
-  return { editorAllowed: loopback && isLoopbackRemoteAddress(req.socket.remoteAddress) }
+  return true
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -442,7 +436,6 @@ export class PresentationHydrationController {
       bytes: 0,
       documentSha256: parsed.document!.sha256,
       sourcePath: parsed.sourcePath,
-      editable: parsed.editable === true,
       resultDigest: renderResultDigest(parsed),
     }
     const bytes = Buffer.byteLength(JSON.stringify(authorization), 'utf8')
@@ -477,10 +470,10 @@ export class PresentationHydrationController {
         throw new HttpError(405)
       }
       const authority = requestAuthority(req, this.#trustedHosts())
-      if (authority === undefined) throw new HttpError(403)
+      if (!authority) throw new HttpError(403)
       const request = parseHydrationRequest(await readJsonBody(req))
       if (request === undefined) throw new HttpError(400)
-      const resolved = this.#resolve(request, authority.editorAllowed)
+      const resolved = this.#resolve(request)
       if (resolved === undefined) throw new HttpError(404)
       finishJson(res, resolved)
     } catch (error) {
@@ -494,24 +487,17 @@ export class PresentationHydrationController {
     }
   }
 
-  #resolve(request: HydrationRequest, editorAllowed: boolean): JsonValue | undefined {
+  #resolve(request: HydrationRequest): JsonValue | undefined {
     // The durable settlement is the sole preview authority. The live cache
-    // can only restore editing after it matches that event exactly.
+    // only restores the preview envelope after it matches that event exactly.
     const result = this.#historicalResult(request)
     if (result === undefined) return undefined
     const authorization = this.#liveAuthorization(request, result)
     if (authorization === null) return undefined
-    const editor = authorization !== undefined
-      && editorAllowed
-      && authorization.editable
-      && authorization.sourcePath !== undefined
-      ? this.dependencies.editor?.grantFor(authorization.sourcePath, authorization.documentSha256)
-      : undefined
     const projected = projectRenderGrant(
       result as unknown as JsonValue,
       this.dependencies.render,
       this.dependencies.viewer?.viewerGrant,
-      editor,
     )
     if (!isRecord(projected) || !(PRESENTATION_META_KEY in projected)) return undefined
     const envelope = projected[PRESENTATION_META_KEY]
@@ -538,7 +524,6 @@ export class PresentationHydrationController {
     if (
       record.documentSha256 !== request.documentSha256
       || record.sourcePath !== result.sourcePath
-      || record.editable !== (result.editable === true)
       || record.resultDigest !== renderResultDigest(result)
     ) return undefined
     this.#touchLive(key, record)

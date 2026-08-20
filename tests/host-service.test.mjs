@@ -79,18 +79,22 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
 
     assert.deepEqual(inject, ['tools', 'sessions', 'fs', 'sandboxPolicy'])
     assert.deepEqual(injectedServices, [['webServer']])
-    assert.equal(registeredTools.length, 5)
+    assert.equal(registeredTools.length, 3)
     assert.deepEqual(registeredTools.map(tool => tool.name), [
       'openpencil_render',
-      'openpencil_selection',
       'openpencil_new',
-      'openpencil_create',
-      'openpencil_edit',
+      'openpencil_apply',
     ])
     assert.equal(registeredTools.some(tool => tool.name === 'design_render'), false, 'legacy render alias must remain client-only')
+    assert.equal(registeredTools.some(tool => tool.name === 'openpencil_selection'), false, 'selection tool must be gone')
+    assert.equal(registeredTools.some(tool => tool.name === 'openpencil_create'), false, 'create tool must be gone')
+    assert.equal(registeredTools.some(tool => tool.name === 'openpencil_edit'), false, 'edit tool must be gone')
     assert.equal(registeredTools[0].output.schema.properties.sourceTool.const, 'openpencil_render')
+    assert.deepEqual([...registeredTools[1].parameters.required].sort(), ['operations', 'path'])
+    assert.equal(registeredTools[1].output.schema.properties.created.const, true)
     assert.deepEqual([...registeredTools[2].parameters.required].sort(), ['operations', 'path'])
-    assert.equal(registeredTools[2].output.schema.properties.created.const, true)
+    assert.equal(registeredTools[2].output.schema.properties.applied.const, true)
+    assert.equal(registeredTools[2].output.schema.properties.saved.const, true)
     assert.deepEqual(emittedEvents, [], 'registration alone must not claim a filesystem observation')
     assert.deepEqual(
       routeRegistrations.map(route => ({ kind: route.kind, path: route.path })),
@@ -98,7 +102,6 @@ test('plugin mounts its HTTP routes through the rc.2 webServer service', async (
         { kind: 'prefix', path: '/_dsh/dsh-openpencil-lite/render' },
         { kind: 'exact', path: '/_dsh/dsh-openpencil-lite/presentation' },
         { kind: 'prefix', path: '/_dsh/dsh-openpencil-lite/viewer-assets' },
-        { kind: 'prefix', path: '/_dsh/dsh-openpencil-lite/editor' },
       ],
     )
     assert.equal(typeof disposeInjectedRoutes, 'function')

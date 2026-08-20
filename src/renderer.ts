@@ -26,7 +26,6 @@ import { basename, delimiter, isAbsolute, join, relative, resolve, sep } from 'n
 import { randomUUID } from 'node:crypto'
 import type { JsonValue } from '@deepseek-ai/dsh-tools'
 import type { ViewerGrant } from './viewer-assets.js'
-import type { EditorGrant } from './editor-host.js'
 import { OPENPENCIL_RENDER_TOOL_NAME } from './tool-names.js'
 
 /** HTTP prefix owned by the render capability route. */
@@ -132,9 +131,6 @@ export interface RenderResult {
   /** Ordered top-level frames. The first entry is also exposed by legacy image fields. */
   frames?: RenderFrame[]
   frameCount?: number
-  editable?: boolean
-  /** Live-card intent: expand the editor once after a newly-created design renders. */
-  autoOpenEditor?: boolean
   document?: DocumentSnapshot
   note?: string
 }
@@ -776,7 +772,6 @@ export function projectRenderGrant(
   value: JsonValue,
   controller: RenderAccessController,
   viewer?: ViewerGrant,
-  editor?: EditorGrant,
 ): JsonValue {
   if (!controller.routeAvailable || !isRecord(value)) return value
   if (
@@ -840,8 +835,6 @@ export function projectRenderGrant(
     ...(result.fidelity === undefined ? {} : { fidelity: result.fidelity }),
     ...(result.warnings === undefined ? {} : { warnings: result.warnings }),
     ...(viewer === undefined ? {} : { viewer }),
-    ...(editor === undefined ? {} : { editor }),
-    ...(editor === undefined || result.autoOpenEditor !== true ? {} : { autoOpenEditor: true }),
   }
   return { ...value, [PRESENTATION_META_KEY]: envelope } as unknown as JsonValue
 }
