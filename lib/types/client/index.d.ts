@@ -1,18 +1,16 @@
 /**
- * Browser presentation for `openpencil_render` and historical
+ * Browser-side presentation for `openpencil_render` and historical
  * `design_render` conversation cards.
  *
- * PNG remains the replay-safe default. When the host also grants access to
- * the source `.op`, the user can opt into one shared, read-only Web SDK
- * canvas. The SDK and document are fetched only after that explicit action.
- *
- * When `dsh-better-sidebar` is loaded, a single `openpencil:preview` sidebar
- * tab is registered and refreshed with the session's most recent render;
- * without it the plugin degrades to the inline card only.
+ * The inline conversation card is deliberately hidden: renders appear only in
+ * the `openpencil:preview` sidebar tab (registered against `dsh-better-sidebar`
+ * when present). A silent observer mounted on the tool-call slot recovers the
+ * browser-only grant envelope and feeds the per-session preview store; the
+ * tab then renders PNG frames and the optional read-only Web SDK canvas.
+ * Without `dsh-better-sidebar` the plugin renders no inline card at all.
  */
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client';
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
-import type { CompatibleToolCallViewProps } from './details-compat.js';
 import type { GalleryFrame, GalleryLocale } from './frame-gallery.js';
 export { LEGACY_DESIGN_RENDER_TOOL_NAME, OPENPENCIL_RENDER_TOOL_NAME, } from '../tool-names.js';
 export { calculateGalleryFitViewZoom, clampGalleryZoom, frameLabel, frameGalleryCopy, galleryZoomCommandTarget, galleryViewportMaxHeight, galleryZoomPercent, galleryZoomShortcut, GALLERY_COMPACT_MAX_HEIGHT, GALLERY_TOOLBAR_CONTROL_CONTENT_LAYOUT, GALLERY_TOOLBAR_CONTROL_HEIGHT, GALLERY_TOOLBAR_CONTROL_LAYOUT, GALLERY_ZOOM_MAX, GALLERY_ZOOM_MIN, GALLERY_ZOOM_STEP, nextGalleryZoom, normalizeFrameIndex, } from './frame-gallery.js';
@@ -24,21 +22,10 @@ export declare const PRESENTATION_META_KEY = "$dshOpenPencil";
 export declare const OPENPENCIL_PREVIEW_TAB_TYPE: "openpencil:preview";
 export type PresentationLocale = GalleryLocale;
 export declare function designRenderCopy(locale: PresentationLocale): {
-    readonly designRender: "OpenPencil render";
-    readonly error: "error";
-    readonly rendering: "rendering…";
-    readonly done: "done";
-    readonly renderingDocument: "Rendering the design document…";
-    readonly renderFailed: "The render failed.";
     readonly frames: "frames";
     readonly openInteractiveCanvas: "Open interactive canvas";
-    readonly openRenderedPng: "Open rendered PNG";
     readonly downloadPng: "Download PNG";
-    readonly editSource: "Open source .op";
     readonly downloadSource: "Download source .op";
-    readonly inspectToolCall: "Inspect tool call";
-    readonly recoveringPreview: "Recovering the OpenPencil preview…";
-    readonly noPreview: "No preview channel available in this host.";
     readonly canvas: "OpenPencil canvas";
     readonly zoomOut: "Zoom out";
     readonly zoomIn: "Zoom in";
@@ -56,21 +43,10 @@ export declare function designRenderCopy(locale: PresentationLocale): {
     readonly previewTabEmptyHint: "Ask the agent to run openpencil_render to see the design preview here.";
     readonly openSource: "Open source .op";
 } | {
-    readonly designRender: "OpenPencil 渲染";
-    readonly error: "错误";
-    readonly rendering: "渲染中…";
-    readonly done: "完成";
-    readonly renderingDocument: "正在渲染设计文档…";
-    readonly renderFailed: "渲染失败。";
     readonly frames: "页";
     readonly openInteractiveCanvas: "打开交互画布";
-    readonly openRenderedPng: "打开渲染 PNG";
     readonly downloadPng: "下载 PNG";
-    readonly editSource: "打开源文件 .op";
     readonly downloadSource: "下载源文件 .op";
-    readonly inspectToolCall: "检查工具调用";
-    readonly recoveringPreview: "正在恢复 OpenPencil 预览…";
-    readonly noPreview: "当前宿主没有可用的预览通道。";
     readonly canvas: "OpenPencil 画布";
     readonly zoomOut: "缩小";
     readonly zoomIn: "放大";
@@ -166,11 +142,17 @@ interface SidebarPreviewTabProps {
 }
 /** The `openpencil:preview` sidebar tab: latest render of the session. */
 export declare function OpenPencilPreviewTab(props: SidebarPreviewTabProps): React.JSX.Element;
-/** Render one OpenPencil render tool call as a PNG-first card. */
-export declare function DesignRenderView({ block, callId, toolName, openFile, inspect, locale, sessionId, }: CompatibleToolCallViewProps & {
-    locale?: PresentationLocale;
-}): import("react").JSX.Element;
+/**
+ * Silent observer mounted on `openpencil_render` / `design_render` tool calls.
+ *
+ * Renders NOTHING inline (the conversation card is hidden by design). It
+ * recovers the browser-only presentation grant (embedded or hydrated) and, on
+ * settle, feeds the session's preview store and focuses the sidebar tab.
+ */
+export declare function SilentRenderObserver({ block, callId, toolName, sessionId, }: ToolCallViewProps & {
+    sessionId: unknown;
+}): React.JSX.Element | null;
 /** Required client services. */
 export declare const inject: string[];
-/** Register the canonical render view plus the optional sidebar preview tab. */
+/** Register the silent render observer plus the optional sidebar preview tab. */
 export declare function apply(ctx: ClientContext): void;
