@@ -136,8 +136,18 @@ export interface ActiveMcpCallOptions {
 
 export interface CreateDocumentBatchOptions {
   operations: string
+  pageId?: string
   canvasWidth?: number
   postProcess?: boolean
+  /**
+   * Seed the transient daemon with an existing `.op` file instead of an empty
+   * document. The caller owns the temp file lifetime (it must copy the source
+   * to a private temp path first so the daemon can never overwrite the real
+   * target). Version semantics are per-daemon: a batch still bumps the MCP
+   * version from 0 to 1, so the post-batch increment guard below holds for
+   * both empty and existing-document starts.
+   */
+  startFromPath?: string
   signal: AbortSignal
 }
 
@@ -681,11 +691,16 @@ export class EditorHostController {
     binary: string,
     options: CreateDocumentBatchOptions,
   ): Promise<CreateDocumentBatchResult> {
-    const tempRoot = await mkdtemp(join(tmpdir(), 'dsh-openpencil-new-'))
-    const sourcePath = join(tempRoot, 'starter.op')
+    const tempRoot = await mkdtemp(join(tmpdir(), 'dsh-openpencil-lite-batch-'))
+    // When seeding from an existing document, the caller owns the temp file
+    // (it must be a private copy so the daemon can never overwrite the real
+    // target). Otherwise this method authors an empty starter document.
+    const sourcePath = options.startFromPath ?? join(tempRoot, 'starter.op')
     let child: ChildProcessWithoutNullStreams | undefined
     try {
-      await writeFile(sourcePath, EMPTY_DOCUMENT_JSON, { flag: 'wx', mode: 0o600 })
+      if (options.startFromPath === undefined) {
+        await writeFile(sourcePath, EMPTY_DOCUMENT_JSON, { flag: 'wx', mode: 0o600 })
+      }
       options.signal.throwIfAborted()
       if (this.#disposePromise !== undefined) throw new Error('OpenPencil editor host is shutting down')
 
@@ -724,6 +739,9 @@ export class EditorHostController {
           tool: 'batch_design',
           arguments: {
             operations: options.operations,
+            ...(options.pageId === undefined || options.pageId.length === 0
+              ? {}
+              : { pageId: options.pageId }),
             ...(options.canvasWidth === undefined ? {} : { canvasWidth: options.canvasWidth }),
             ...(options.postProcess === undefined ? {} : { postProcess: options.postProcess }),
           },

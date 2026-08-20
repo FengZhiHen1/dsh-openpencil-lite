@@ -35,6 +35,7 @@ import {
   createDesignSelectionTool,
 } from './design-tools.js'
 import { createDesignNewTool } from './new-tool.js'
+import { createDesignApplyTool } from './apply-tool.js'
 import {
   VIEWER_ASSET_ROUTE_PREFIX,
   prepareViewerAssets,
@@ -44,6 +45,7 @@ import {
   EditorHostController,
 } from './editor-host.js'
 import {
+  OPENPENCIL_APPLY_TOOL_NAME,
   OPENPENCIL_CREATE_TOOL_NAME,
   OPENPENCIL_EDIT_TOOL_NAME,
   OPENPENCIL_NEW_TOOL_NAME,
@@ -58,6 +60,7 @@ import {
 
 export {
   LEGACY_DESIGN_RENDER_TOOL_NAME,
+  OPENPENCIL_APPLY_TOOL_NAME,
   OPENPENCIL_CREATE_TOOL_NAME,
   OPENPENCIL_EDIT_TOOL_NAME,
   OPENPENCIL_NEW_TOOL_NAME,
@@ -145,6 +148,14 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       observe: (target, observation, exec) => eventCtx.emit('fs/observed', target, observation, exec),
     })),
     `dsh-openpencil-lite: ${OPENPENCIL_NEW_TOOL_NAME} tool`,
+  ))
+  disposers.push(ctx.effect(
+    () => hostCtx.tools.register(createDesignApplyTool(editorHost, {
+      fs: hostCtx.fs,
+      sandboxPolicy: hostCtx.sandboxPolicy,
+      observe: (target, observation, exec) => eventCtx.emit('fs/observed', target, observation, exec),
+    })),
+    `dsh-openpencil-lite: ${OPENPENCIL_APPLY_TOOL_NAME} tool`,
   ))
   disposers.push(ctx.effect(
     () => hostCtx.tools.register(createDesignCreateTool(editorHost)),
