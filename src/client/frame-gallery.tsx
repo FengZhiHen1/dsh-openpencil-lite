@@ -197,8 +197,8 @@ const styles: Record<string, React.CSSProperties> = {
   zoomButton: {
     ...GALLERY_TOOLBAR_CONTROL_LAYOUT,
     minWidth: GALLERY_TOOLBAR_CONTROL_HEIGHT, padding: '0 8px', borderRadius: 5,
-    border: '1px solid var(--ui-border, rgba(128,128,128,0.35))',
-    color: 'var(--ui-text, inherit)', background: 'var(--ui-card-bg, rgba(128,128,128,0.08))', cursor: 'pointer',
+    border: '1px solid var(--dsw-alias-border-l2)',
+    color: 'var(--ui-text)', background: 'var(--dsw-alias-bg-layer-2)', cursor: 'pointer',
     fontFamily: 'inherit', fontWeight: 'inherit', fontStyle: 'inherit',
     fontSize: 12, lineHeight: 1, whiteSpace: 'nowrap',
   },
@@ -211,13 +211,13 @@ const styles: Record<string, React.CSSProperties> = {
   counter: {
     position: 'absolute', right: 9, top: 9,
     padding: '3px 7px', borderRadius: 99,
-    color: '#fff', background: 'rgba(15,15,18,0.72)',
+    color: 'var(--dsw-static-neutral-bluish-00)', background: 'var(--dsw-alias-bg-mask-3)',
     fontSize: 11, lineHeight: 1.3, pointerEvents: 'none',
     backdropFilter: 'blur(4px)',
   },
   controls: {
     display: 'flex', alignItems: 'center', flexWrap: 'wrap', minWidth: 0, gap: 7,
-    fontSize: 12, color: 'var(--ui-text-muted, #888)',
+    fontSize: 12, color: 'var(--ui-text-muted)',
   },
   currentName: {
     flex: '1 1 120px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -225,8 +225,8 @@ const styles: Record<string, React.CSSProperties> = {
   arrow: {
     ...GALLERY_TOOLBAR_CONTROL_LAYOUT,
     width: GALLERY_TOOLBAR_CONTROL_HEIGHT, minWidth: GALLERY_TOOLBAR_CONTROL_HEIGHT, padding: 0, borderRadius: 99,
-    border: '1px solid var(--ui-border, rgba(128,128,128,0.35))',
-    color: 'var(--ui-text, inherit)', background: 'var(--ui-card-bg, rgba(128,128,128,0.08))',
+    border: '1px solid var(--dsw-alias-border-l2)',
+    color: 'var(--ui-text)', background: 'var(--dsw-alias-bg-layer-2)',
     cursor: 'pointer', fontFamily: 'inherit', fontWeight: 'inherit', fontStyle: 'inherit', fontSize: 20, lineHeight: 1,
   },
   strip: {
@@ -237,17 +237,17 @@ const styles: Record<string, React.CSSProperties> = {
   thumbnail: {
     flex: '0 0 112px', width: 112, height: 84, padding: 3,
     overflow: 'hidden', scrollSnapAlign: 'start',
-    borderRadius: 7, border: '1px solid rgba(128,128,128,0.3)',
-    background: 'rgba(128,128,128,0.06)', cursor: 'pointer',
+    borderRadius: 7, border: '1px solid var(--dsw-alias-border-l2)',
+    background: 'var(--dsw-alias-bg-skeleton)', cursor: 'pointer',
   },
   thumbnailSelected: {
-    border: '2px solid var(--ui-accent, #0ea5e9)', padding: 2,
-    boxShadow: '0 0 0 1px color-mix(in srgb, var(--ui-accent, #0ea5e9) 28%, transparent)',
+    border: '2px solid var(--dsw-alias-state-business-primary)', padding: 2,
+    boxShadow: '0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 28%, transparent)',
   },
   thumbnailImage: { display: 'block', width: '100%', height: '100%', objectFit: 'contain', borderRadius: 4 },
   failure: {
     minHeight: 128, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    padding: 18, color: 'var(--ui-text-muted, #888)', fontSize: 12, textAlign: 'center',
+    padding: 18, color: 'var(--ui-text-muted)', fontSize: 12, textAlign: 'center',
   },
 }
 
@@ -414,7 +414,7 @@ export function FrameGallery({ frames, selectedIndex, onSelect, locale }: FrameG
               style={{
                 ...styles.zoomButton,
                 background: zoomMode === 'fit-view'
-                  ? 'color-mix(in srgb, var(--ui-accent, #0ea5e9) 18%, transparent)'
+                  ? 'color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent)'
                   : styles.zoomButton.background,
               }}
               aria-label={copy.fitFrameAria}
@@ -435,7 +435,7 @@ export function FrameGallery({ frames, selectedIndex, onSelect, locale }: FrameG
               type="button"
               style={{
                 ...styles.zoomButton,
-                background: fitContent ? 'color-mix(in srgb, var(--ui-accent, #0ea5e9) 18%, transparent)' : styles.zoomButton.background,
+                background: fitContent ? 'color-mix(in srgb, var(--dsw-alias-state-business-primary) 18%, transparent)' : styles.zoomButton.background,
               }}
               aria-label={fitContent ? copy.restoreCardAria : copy.fitContentAria}
               aria-pressed={fitContent}
