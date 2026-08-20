@@ -6,12 +6,23 @@ const require = createRequire(import.meta.url)
 const manifest = require('../package.json')
 let client
 let loadedPluginId
+let primitivesRequireCalls = 0
+// `lib/client.js` requires `@deepseek-ai/dsh-client-ui-primitives` at runtime
+// (ESM-only; the browser module loader resolves it, Node's CJS require cannot).
+// Stub it in the loader's require so the bundle can be exercised in Node.
+const stubRequire = (id) => {
+  if (id === '@deepseek-ai/dsh-client-ui-primitives') {
+    primitivesRequireCalls += 1
+    return { IconEditOutline16: () => null }
+  }
+  return require(id)
+}
 globalThis.window = {
   location: { href: 'http://127.0.0.1:3080/' },
   __ModuleLoader__: {
     load(definition) {
       loadedPluginId = definition.id
-      client = definition.factory(require)
+      client = definition.factory(stubRequire)
     },
   },
 }
@@ -19,6 +30,10 @@ await import(`../lib/client.js?test=${Date.now()}`)
 
 test('registers the client bundle under the published package name', () => {
   assert.equal(loadedPluginId, manifest.name)
+})
+
+test('client bundle requires the platform primitives icon family at load', () => {
+  assert.ok(primitivesRequireCalls > 0, 'the bundle must resolve @deepseek-ai/dsh-client-ui-primitives at load time')
 })
 
 test('client injects only slots + locale and no longer requires the editor surface', () => {

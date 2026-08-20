@@ -20,6 +20,7 @@ import {
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import { IconEditOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
@@ -779,6 +780,9 @@ export function apply(ctx: ClientContext): void {
     const dispose = registerTab({
       id: OPENPENCIL_PREVIEW_TAB_TYPE,
       title: () => designRenderCopy(getLocale()).previewTab,
+      // OpenPencil 品牌即"铅笔"：平台 16px 图标家族的铅笔字形
+      // （与 better-sidebar 内置 tab 的 icon 用法一致）。
+      icon: (size: number) => <IconEditOutline16 size={size} />,
       single: true,
       component: (props: SidebarPreviewTabProps) => {
         // Component-level locale subscription so tab copy follows DSH locale.
