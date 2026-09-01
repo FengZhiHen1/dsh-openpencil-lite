@@ -20,9 +20,9 @@ fork 自上游的客户端已实现 token 化：颜色几乎全部经 `var(--dsw
 
 ## 直接后果
 
-- `需求.md` 新增 R-11（原生视觉对齐的范围与边界）与 AC-11（无硬编码 hex 可 grep 机判 + 视觉一致性与交互回归检查）。
-- `technical-details/部署形态与验证顺序.md` 迭代顺序新增视觉对齐步骤（功能验收后、fork 钉 ref 前）。
-- 波及文档：本主题 `需求.md`、`technical-details/部署形态与验证顺序.md`、`README.md`（状态区）、本决策。
+- `../需求.md` 新增 R-11（原生视觉对齐的范围与边界）与 AC-11（无硬编码 hex 可 grep 机判 + 视觉一致性与交互回归检查）。
+- `../technical-details/部署形态与验证顺序.md` 迭代顺序新增视觉对齐步骤（功能验收后、fork 钉 ref 前）。
+- 波及文档：本主题 `../需求.md`、`../technical-details/部署形态与验证顺序.md`、`README.md`（状态区）、本决策。
 
 ## 重访条件
 

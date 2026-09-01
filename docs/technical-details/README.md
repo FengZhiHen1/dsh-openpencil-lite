@@ -2,7 +2,7 @@
 
 ## 权威范围
 
-本文唯一拥有 `dsh-openpencil-lite` 技术细节的阅读顺序与各机制文档的权威范围。机制事实归 `technical-details/` 各文档，需求与约束归 `需求.md`，选型理由归 `decisions/`。
+本文唯一拥有 `dsh-openpencil-lite` 技术细节的阅读顺序与各机制文档的权威范围。机制事实归 `technical-details/` 各文档，需求与约束归 `../需求.md`，选型理由归 `decisions/`。
 
 ## 阅读顺序
 

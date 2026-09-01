@@ -20,10 +20,10 @@ Agent 不打开 web 直接设计 `.op` 采用"无头 apply + 保留纯 JSON 编�
 
 ## 直接后果
 
-- 新增 `openpencil_apply` 工具（契约与失败语义见 `technical-details/无头apply机制.md`）。
+- 新增 `openpencil_apply` 工具（契约与失败语义见 `../technical-details/无头apply机制.md`）。
 - 删除 `openpencil_selection`、`openpencil_create`、`openpencil_edit`；单节点改动用 batch 的 `U(nodeId, patchJson)` 或纯 JSON 编辑表达。
 - `openpencil_render` 去掉 `editable`/`autoOpen` 编辑器语义；"预览入口"改由侧边栏 tab 承担。
-- 波及文档：本主题 `需求.md`（R-03/R-04 与 AC-02/AC-03/AC-07）、`technical-details/改造范围与标识.md`、`technical-details/无头apply机制.md`；`openpencil-prototype` skill 文案待工具集落地后同步。
+- 波及文档：本主题 `../需求.md`（R-03/R-04 与 AC-02/AC-03/AC-07）、`../technical-details/改造范围与标识.md`、`../technical-details/无头apply机制.md`；`openpencil-prototype` skill 文案待工具集落地后同步。
 
 ## 重访条件
 
