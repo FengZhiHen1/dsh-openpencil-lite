@@ -1,4 +1,4 @@
-# 决策：`.op` 文件查看器形态——只读画布直读（op-file-viewer-canvas-2026-08）
+# DSR-004：`.op` 文件查看器形态——只读画布直读
 
 ## 决策
 
@@ -20,10 +20,10 @@
 
 ## 直接后果
 
-- `requirements.md` 新增 R-12/AC-12，非目标增补"文件查看器不提供 PNG 帧轨与按路径 on-demand 渲染"。
-- `technical-details/better-sidebar-preview.md` 的"可选增强（延期确认）"改写为正式机制节；`refactor-scope.md` 新增清单登记查看器与蒙版按钮、取消渲染路由预案；`deployment.md` 迭代顺序新增对应验收步骤。
+- `需求.md` 新增 R-12/AC-12，非目标增补"文件查看器不提供 PNG 帧轨与按路径 on-demand 渲染"。
+- `technical-details/侧边栏预览机制.md` 的"可选增强（延期确认）"改写为正式机制节；`改造范围与标识.md` 新增清单登记查看器与蒙版按钮、取消渲染路由预案；`部署形态与验证顺序.md` 迭代顺序新增对应验收步骤。
 - host 侧新增一个只读 viewer-grant 通道（返回固定资产 URL 三元组），无渲染、无签名。
-- 波及文档：本主题 `requirements.md`、`technical-details/better-sidebar-preview.md`、`technical-details/refactor-scope.md`、`technical-details/deployment.md`、`README.md`（状态区）、本决策。
+- 波及文档：本主题 `需求.md`、`technical-details/侧边栏预览机制.md`、`technical-details/改造范围与标识.md`、`technical-details/部署形态与验证顺序.md`、`README.md`（状态区）、本决策。
 
 ## 重访条件
 

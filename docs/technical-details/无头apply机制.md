@@ -2,7 +2,7 @@
 
 ## 权威范围
 
-本文唯一拥有 `openpencil_apply` 工具的需求追溯、输入输出契约、临时 daemon 生命周期、写回与冲突语义及失败处理。标识与删除清单归 `refactor-scope.md`，需求归 `requirements.md`。
+本文唯一拥有 `openpencil_apply` 工具的需求追溯、输入输出契约、临时 daemon 生命周期、写回与冲突语义及失败处理。标识与删除清单归 `改造范围与标识.md`，需求归 `需求.md`。
 
 ## 结论先行
 
