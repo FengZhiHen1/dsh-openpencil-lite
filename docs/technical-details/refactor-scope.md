@@ -1,0 +1,48 @@
+# dsh-openpencil-lite 改造范围与标识
+
+## 权威范围
+
+本文唯一拥有 `dsh-openpencil-lite` 相对上游插件的删除、保留、新增清单，以及包名、插件 id、路由前缀、工具命名的标识约定与历史回放边界。需求归 `requirements.md`，`openpencil_apply` 机制归 `headless-apply.md`。
+
+## 现状事实（改造起点）
+
+- 上游第三方包 `@zseven-w/dsh-openpencil@0.1.0-rc.1`（改造起点快照，2026-08-19：当时 npm 安装于 web profile；现状 web 已换装本插件，见 `deployment.md`）；`dsh-better-sidebar` 同 profile 可用（其服务契约不归本文拥有，版本事实见 `better-sidebar-preview.md`）。
+- 上游注册 5 个模型可见工具：`openpencil_render`、`openpencil_selection`、`openpencil_new`、`openpencil_create`、`openpencil_edit`；loader id 为 `dsh-openpencil`。
+- 上游路由前缀：`/_dsh/dsh-openpencil/render`、`/_dsh/dsh-openpencil/viewer-assets`、`/_dsh/dsh-openpencil/editor`、`/_dsh/dsh-openpencil/presentation`。
+- `openpencil_create`/`openpencil_edit`/`openpencil_selection` 依赖已打开的活动编辑器会话；`create`/`edit` 写入活画布且 `saved` 恒为 `false`，落盘依赖 GUI 的 Save 动作。
+- `openpencil_new` 是纯无头路径：临时 daemon 执行 `batch_design` 后原子落盘，不需要浏览器编辑器。
+- `openpencil_render` 只从磁盘文件渲染，`editable:true` 时输出编辑器 grant 并展示"在侧边栏编辑"入口。
+- 本机缓存已有 149 张渲染与 17 份快照，exact 渲染实测可用。
+
+## 标识决策
+
+- 已确认（用户）：插件名 `dsh-openpencil-lite`。npm 包名、loader id、插件目录、设计文档目录统一使用 `dsh-openpencil-lite`。
+- 配套项（推荐执行，未单独确认）：模型工具名保留 `openpencil_*` 前缀（`openpencil_render`、`openpencil_new`、`openpencil_apply` 沿用既有命名语感）；单 profile 内替换原插件不产生工具名冲突，旧会话回放也需要工具名连续。
+- 配套项（推荐执行，未单独确认）：路由前缀改为 `/_dsh/dsh-openpencil-lite/*`，与插件身份一致。
+
+## 删除清单
+
+- 工具：`openpencil_selection`（无活画布可读）、`openpencil_create` 与 `openpencil_edit`（以无头 apply 取代其 batch 语义）。
+- host：`EditorHostController` 的编辑器会话生命周期（launch/refresh/save/close/selection/recovery、capability 加密、会话去重与回收）；`EDITOR_ROUTE_PREFIX` 路由。
+- client：编辑器工作台相关模块（editor-panel、editor-modal、editor-workbench-host、editor-dock-layout、editor-bridge、editor-recovery、editor-successor、selection-dock、selection-polling、selection-store、details-compat 的编辑器部分）；`conversation.input.dock` 的选区注入。
+- 渲染表达：`openpencil_render` 的 `editable`/`autoOpen` 参数与 presentationMeta 中的 editor grant；`openpencil_new` 输出 `note` 中的编辑器引导文案（指示以 `editable=true, autoOpen=true` 调 render）同步去除。
+- client（2026-08-20 用户确认）：消息流行内渲染卡片整体移除（原 `DesignRenderView` 卡片 UI 与 `tool.call.toolview` 的可见注册）——预览统一走侧边栏 `openpencil:preview` tab；同位置改挂渲染 null 的静默观察器（settle 后仍写入预览 store 并 `openTab`，见 `better-sidebar-preview.md`）。
+
+## 保留清单
+
+- host：渲染管线（`RenderAccessController`、内容寻址快照、`runOpenPencilRender`/`runJianRender`、`projectRenderGrant` 去掉 editor 项）、viewer-assets 只读画布资产路由、presentation-hydration 的只读回放（去掉 editor 授权分支）、`createDocumentBatch`（保留并泛化：当前硬编码以空稿启动，需支持载入现有文件；作为无头机制核心，归 `headless-apply.md`）。
+- client：`SilentRenderObserver`（消息流内渲染 null、settle 后喂预览 store 的静默观察器，取代原行内卡片 DesignRenderView）、FrameGallery 缩略图轨、CanvasModal 只读 Web SDK 画布、presentation-hydration 客户端、`design_render` 历史别名的只读恢复（打开旧会话时侧边栏反映其最近渲染）。
+
+## 新增清单
+
+- 工具 `openpencil_apply`（对已有 `.op` 执行 batch_design 并原子写回）。
+- client 注册 `dsh-better-sidebar` 预览 tab（机制见 `better-sidebar-preview.md`）。
+- client 注册 `.op` 文件查看器（`registerFileViewer`，画布直读形态）、host 只读 viewer-grant 通道、client 内联只读画布组件（自 `CanvasModal` 抽取装配逻辑）（2026-08-20 用户确认；机制见 `better-sidebar-preview.md`，取舍见 `decisions/op-file-viewer-canvas-2026-08.md`）。
+- client preview tab "预览 PNG"蒙版按钮（平台 `ImageLightbox`，懒加载降级；2026-08-20 用户确认）。
+- 取消项（原"可选增强"预案）：按路径 on-demand 渲染路由——文件查看器改采画布直读后不再需要。
+
+## 风险
+
+- 上游为第三方，长期维护依赖本仓库 fork 自持；上游演进与本 fork 的取舍需维护者决策。
+- 手写/无头产出的 `.op` 缺少编辑器规范化元数据（如 `editorMeta`）；当前渲染不依赖，但未来若复用 OpenPencil 原生编辑器编辑同一文件可能存在兼容差。
+- 历史回放依赖 presentation-hydration 与 legacy 别名；删除编辑器分支时必须守住只读回放不回归。

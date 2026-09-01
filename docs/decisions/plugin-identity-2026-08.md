@@ -1,0 +1,35 @@
+# 决策：插件命名与标识（plugin-identity-2026-08）
+
+## 决策
+
+改造后的 OpenPencil 插件命名为 `dsh-openpencil-lite`，npm 包名、插件 loader id、源码与文档目录统一使用该名，与上游 `@zseven-w/dsh-openpencil` 完全区分。用户于 2026-08-19 确认。
+
+## 上下文
+
+当前构建的 `@zseven-w/dsh-openpencil@0.1.0-rc.1` 是第三方已发布包，loader id 为 `dsh-openpencil`。改造产物若沿用原名，web profile 的同 id/同包名会造成标识重复与挂载冲突；用户明确要求命名修改、避免与原插件重复。改名同时决定包名、目录与文档路径，是全文档集的根节点。
+
+## 真实方向与评价
+
+- 方向 A：`dsh-openpencil-lite`。语义"同一产品家族的精简版"，与原名关联直观、无混淆；小写连字符无 scope，与仓库既有 `dsh-guardrails`、`dsh-skill-manager` 命名风格一致；工具名仍可延续 `openpencil_*` 语感。
+- 方向 B：`dsh-op-preview`。突出"预览/侧边栏"定位、更短，但与"无头设计工具"的定位弱关联，且切断了与原插件的可辨识联系。
+- 方向 C：`dsh-openpencil-headless`。突出"Agent 无头驱动"，但弱化侧边栏预览语义；"headless"对用户价值表达不如"lite"中性。
+
+## 最终决定
+
+采用方向 A。理由：语义最清楚、与上游关联直观、契合仓库命名约定，且不绑定某单一特性（预览/无头都涵盖）。
+
+## 配套项（推荐执行，未单独确认）
+
+- 模型工具名保留 `openpencil_render`/`openpencil_new`，新增 `openpencil_apply`，删除 `openpencil_selection`/`openpencil_create`/`openpencil_edit`。单 profile 内替换原插件不产生工具名冲突，旧会话回放也需要工具名连续；如未来需要与上游并存，再在别名层加前缀，属低风险可回退变更。
+- 路由前缀改用 `/_dsh/dsh-openpencil-lite/*`。
+
+## 直接后果
+
+- npm 包名 `dsh-openpencil-lite`、loader id `dsh-openpencil-lite`、插件目录 `plugins/dsh-openpencil-lite/`（DSH_Plugins）、设计文档目录 `docs/`（本仓库）。
+- 波及文档：本主题 `requirements.md`、`technical-details/*`、本决策；DSH_Plugins 仓库文档地图增加主题三（该地图后随 docs/design 体系拆除，文档下沉本仓库 `docs/`）。
+- 上游原包在 web profile 中保留至替换完成；替换后 `--dump-config` 必须只剩 `dsh-openpencil-lite` 一行（验收 AC-01）。
+
+## 重访条件
+
+- 用户偏好其他命名（如未来以"预览"为主品牌）时重访；
+- 若需要与上游 `@zseven-w/dsh-openpencil` 在同一 profile 共存（当前不计划），重访工具名与路由前缀的区分策略。

@@ -1,0 +1,49 @@
+# dsh-openpencil-lite 部署形态与验证顺序
+
+## 权威范围
+
+本文唯一拥有 `dsh-openpencil-lite` 的发布形态、web profile 部署红线、迭代与验收顺序及环境依赖。需求约束归 `requirements.md`，改造清单归 `refactor-scope.md`。
+
+## 结论先行
+
+改造迭代在 `test` profile 以源码直挂形态验证（改后重启即生效）；web 发布形态已确认为路线 A"fork 钉定 ref"（用户确认 2026-08-20）并已在 web profile 落地。本机 OpenPencil 安装（PATH 上的 `openpencil-desktop.exe`）是无头功能与 exact 渲染的前提。
+
+## 现状事实
+
+- web profile 依赖（2026-08-20 实测）：`dsh-openpencil-lite` 以 `github:FengZhiHen1/dsh-openpencil-lite#a79bbd8c1bea86caf521ee935039372a39efd154` 钉定（路线 A 已落地，fork 提交 `lib/` 构建产物，与本仓库子模块 gitlink 同 ref）、`dsh-better-sidebar@^0.14.0`（安装 0.14.0）；`dsh-guardrails` 以本地打包 `file:...dist/*.tgz` 挂载（历史实践）。
+- test profile（2026-08-20 实测）：已装 `dsh-better-sidebar@^0.13.1`，`dsh-openpencil-lite` 以 `link:` 直挂本仓库 `plugins/dsh-openpencil-lite`（迭代形态按设计生效）；test 无上游旧会话，AC-05 历史卡片以构造方式产生。
+- 上游仓库 `github.com/ZSeven-W/dsh-openpencil` 根目录未提交构建产物 `lib/`，且 `package.json` 无 `prepare` 构建钩子，`main` 指向 `lib/index.js` → 直接 `github:` 钉 ref 依赖无法解析主入口。
+- 本机 OpenPencil 安装：`D:\App\Development\OpenPencil\openpencil-desktop.exe` 在 PATH 上，exact 渲染与无头 daemon 均实测可用。
+
+## 部署约束
+
+- web 稳定 profile 红线：只接受已发布 npm 包或 `github:` 钉定 ref 的 git 依赖；禁止 `link:`/`file:` 源码直挂与 junction 指向源码。
+- `github:` 依赖要求 fork 仓库在安装时能提供 `lib/`（仓库内提交构建产物，或补 `prepare` 脚本让 pnpm 安装时构建），且 ref 必须钉死 commit/tag。
+
+## 发布形态决策与备选
+
+- 路线 A（已确认为最终形态并于 web 落地，用户 2026-08-20）：迭代在 `test` profile 直挂本仓库源码（`link:`，改后重启生效）；验收通过后 fork 上游并改造，fork 内提交构建产物或补 `prepare`，web 以 `github:<owner>/dsh-openpencil-lite#<commit>` 钉定。评价：与仓库 dsh-reasoning-effort 的 fork 维护先例一致，满足红线且无 npm 凭证依赖；代价是 fork 仓库体积含构建产物，需维护发布分支纪律。落地事实（2026-08-20）：fork `FengZhiHen1/dsh-openpencil-lite` 提交 `lib/` 产物，web 钉定 `a79bbd8`，与本仓库子模块 gitlink 一致。
+- 路线 B：打包 `dist/*.tgz` 经 `file:` 挂 web。评价：现有 guardrails 即此实践，但 AGENTS.md 文字明确拒绝 `file:` 入 web，属于需用户单独确认的历史特例；不主动采用。
+- 路线 C：发布自有 npm 包 `dsh-openpencil-lite`。评价：最标准，但没有 npm 发布凭证时不可行，列为备选而非默认。
+
+## 环境依赖与降级
+
+- 无头功能（`openpencil_new`/`openpencil_apply`）依赖 OpenPencil 托管 daemon 二进制；缺失时相关工具报明确的"binary unavailable"错误。
+- 渲染精度依赖：exact 渲染器缺失时降级 Jian `runtime-preview`（带 `fidelity` 标记），两者皆缺则渲染失败而非静默出图。
+- viewer 资产缺失时只保持 PNG 预览，不暴露只读画布入口。
+
+## 迭代与验收顺序
+
+1. `test` profile 源码直挂改造后源码；验证 `openpencil_new` + 手写 JSON `openpencil_render` 正常（基线不回归）。
+2. 验证 `openpencil_apply` 对已有 `.op` 原子写回且 `saved:true`、外部改动冲突不覆盖（对应 AC-02/AC-03）。
+3. 前置已满足（2026-08-20 实测：test 已装 `dsh-better-sidebar@^0.13.1`、lite 以 `link:` 直挂）；test 无上游旧会话，AC-05 历史卡片以构造方式产生。然后验证客户端去编辑器后 bundle 正常、旧历史卡片回放可用；better-sidebar 出现唯一 `openpencil:preview` 并随重渲染刷新（对应 AC-04/AC-05/AC-09）。
+4. 引导文案同批交付：更新工具描述与 `openpencil-prototype` skill——与最终工具集一致（无 create/edit/selection 残留），含批量合并、apply 与纯 JSON 的路径选择、渲染自查三条引导（对应 AC-10）。
+5. 视觉对齐（皮肤级，功能验收全过后执行）：按 R-11 边界换皮——硬编码 hex 映射平台 token、圆角/间距归一、控件换 `dsh-client-ui-primitives` 原子；不与去编辑器重构同批，避免回归定位困难（对应 AC-11）。
+6. 文件查看器与蒙版按钮（2026-08-20 确认项）：注册 `.op` 文件查看器并验证 AC-12（合法/非法 `.op` 两路径）；接入 `ImageLightbox` 懒加载并验证 AC-13（含模块缺失降级）。
+7. 全部验收通过后，在 fork 提交产物并把 web 钉定 ref 更新至验收后 commit（路线 A 已落地，此为更新钉定而非首装），`--dump-config` 复核无重复行（对应 AC-01/AC-06/AC-08）。
+
+## 风险
+
+- fork 维护成本与上游演进分叉：改动过多导致上游合并困难时，接受长期自持 fork。
+- 构建产物入库：需约定 fork 内"源码提交 + `lib/` 构建提交"的分支纪律，避免安装时读到过期产物。
+- 工具名沿用 `openpencil_*`：若未来 web 需与上游同 profile 并存（当前不计划），需在别名层加前缀，属低风险可回退变更。
